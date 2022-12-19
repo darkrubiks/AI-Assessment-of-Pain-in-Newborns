@@ -1,2 +1,6 @@
 # ignore datasets folder
 Datasets/
+
+# ignore this files
+relatório.xlsx
+dataset_processing.py
