@@ -48,7 +48,7 @@ for train_index, test_index in skf.split(subjects, datasets):
 
 # Copy the images for each fold into a new folder
 folds_path = 'Datasets\\Folds'
-dataset_path = 'Datasets\\NewDataset'
+dataset_path = 'Datasets\\DatasetFaces'
 
 # Remove folder if present
 try:
