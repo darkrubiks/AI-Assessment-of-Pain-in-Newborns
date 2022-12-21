@@ -20,7 +20,10 @@ UNIFESP_percep_data = pd.read_csv('UNIFESP_percep_heatmaps.csv')
 path_original_dataset = 'Datasets\\Originais\\'
 path_new_dataset = 'Datasets\\NewDataset\\'
 
-rmtree(path_new_dataset)
+try:
+    rmtree(path_new_dataset)
+except:
+    pass
 
 print('Criando diretorio')
 os.makedirs(path_new_dataset)
