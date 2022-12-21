@@ -1,5 +1,5 @@
 """
-leave_some_subject_out.py
+face_detection.py.py
 
 Author: Leonardo Antunes Ferreira
 Date: 21/12/2022
