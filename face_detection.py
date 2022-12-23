@@ -1,5 +1,5 @@
 """
-face_detection.py.py
+face_detection.py
 
 Author: Leonardo Antunes Ferreira
 Date: 21/12/2022
@@ -13,6 +13,7 @@ import cv2
 import os
 import insightface
 import pandas as pd
+import numpy as np
 from shutil import rmtree
 from tqdm import tqdm
 
@@ -46,13 +47,14 @@ for _, row in tqdm(dataframe.iterrows()):
 
     bbox, landmarks = retinaface.detect(img, scale=0.5)
 
-    bbox = bbox[0]
-    landmarks = landmarks[0]
+    # Convert to int, and remove the detection accuracy from bbox
+    bbox = np.array(bbox[0][:-1], 'int')
+    landmarks = np.array(landmarks[0], 'int')
 
-    x = abs(int(bbox[0]))
-    y = abs(int(bbox[1]))
-    w = abs(int(bbox[2])) - x
-    h = abs(int(bbox[3])) - y
+    x = bbox[0]
+    y = bbox[1]
+    w = bbox[2] - x
+    h = bbox[3] - y
 
     face = img[y:y+h,x:x+w]
 
