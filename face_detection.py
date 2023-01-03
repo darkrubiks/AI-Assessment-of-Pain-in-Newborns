@@ -48,8 +48,8 @@ for _, row in tqdm(dataframe.iterrows()):
     bbox, landmarks = retinaface.detect(img, scale=0.5)
 
     # Convert to int, and remove the detection accuracy from bbox
-    bbox = np.array(bbox[0][:-1], 'int')
-    landmarks = np.array(landmarks[0], 'int')
+    bbox = np.array(bbox[0][:-1], 'int').tolist()
+    landmarks = np.array(landmarks[0], 'int').tolist()
 
     x = bbox[0]
     y = bbox[1]
