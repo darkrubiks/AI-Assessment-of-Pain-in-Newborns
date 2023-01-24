@@ -53,31 +53,35 @@ for fold in range(10):
     fold = str(fold)
 
     train_fold_path = os.path.join(folds_path, fold, 'Train')
+    os.mkdir(os.path.join(train_fold_path, 'Landmarks'))
 
     for file_name in tqdm(os.listdir(train_fold_path)):
-        # Read image
-        img = cv2.imread(os.path.join(train_fold_path, file_name))
-        # Get correspondent Face and Landmarks coordinates
-        face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
-        landmarks_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['landmarks_coordinates'].values[0]
-        # Scale the landmarks to the cropped face
-        scaled_landmarks = [scale_coords(x, y, face_coords[0], face_coords[1]) for x, y in landmarks_coords]
+        if '.jpg' in file_name:
+            # Read image
+            img = cv2.imread(os.path.join(train_fold_path, file_name))
+            # Get correspondent Face and Landmarks coordinates
+            face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
+            landmarks_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['landmarks_coordinates'].values[0]
+            # Scale the landmarks to the cropped face
+            scaled_landmarks = [scale_coords(x, y, face_coords[0], face_coords[1]) for x, y in landmarks_coords]# Save landmarks
+            landmarks_file = open(os.path.join(train_fold_path, 'Landmarks', file_name.split('.jpg')[0]), 'wb')
+            pickle.dump(scaled_landmarks, landmarks_file)
+            landmarks_file.close()
 
-        for i in range(20):
+            for i in range(20):
 
-            transformed = transform(image=img, keypoints=scaled_landmarks)
-            
-            # Keep generating images until all landmarks are present
-            while len(transformed['keypoints']) < 5:
                 transformed = transform(image=img, keypoints=scaled_landmarks)
+                # Keep generating images until all landmarks are present
+                while len(transformed['keypoints']) < 5:
+                    transformed = transform(image=img, keypoints=scaled_landmarks)
 
-            # Save image
-            aug_file_name = f'{i:02}_AUG_{file_name}'
-            cv2.imwrite(os.path.join(folds_path, fold, 'Train', aug_file_name), transformed['image'])
-            # Save landmarks
-            auf_landmarks_file = open(os.path.join(folds_path, fold, 'Train', aug_file_name.split('.jpg')[0]), 'wb')
-            pickle.dump(transformed['keypoints'], auf_landmarks_file)
-            auf_landmarks_file.close()
+                # Save image
+                aug_file_name = f'{i:02}_AUG_{file_name}'
+                cv2.imwrite(os.path.join(train_fold_path, aug_file_name), transformed['image'])
+                # Save landmarks
+                aug_landmarks_file = open(os.path.join(train_fold_path, 'Landmarks', aug_file_name.split('.jpg')[0]), 'wb')
+                pickle.dump(transformed['keypoints'], aug_landmarks_file)
+                aug_landmarks_file.close()
 
 
 
