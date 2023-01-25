@@ -18,6 +18,23 @@ from ast import literal_eval
 from utils import *
 
 
+def resize_original_img(path, file_name):
+    # Read image
+    img = cv2.imread(os.path.join(path, file_name))
+    # Get correspondent Face and Landmarks coordinates
+    face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
+    landmarks_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['landmarks_coordinates'].values[0]
+    # Scale the landmarks to the cropped face
+    scaled_landmarks = [scale_coords(x, y, face_coords[0], face_coords[1]) for x, y in landmarks_coords]
+    resized = resize(image=img, keypoints=scaled_landmarks)
+    # Save landmarks and resized image
+    cv2.imwrite(os.path.join(path, file_name), resized['image'])
+    landmarks_file = open(os.path.join(path, 'Landmarks', file_name.split('.jpg')[0]), 'wb')
+    pickle.dump(resized['keypoints'], landmarks_file)
+    landmarks_file.close()
+
+    return img, scaled_landmarks
+
 # Augmentation Pipeline, Affine transformation is always applied, the Horizontal
 # Flip and RandomBrightnessContrast are applied with a 50% chance
 transform = A.Compose([
@@ -27,14 +44,25 @@ transform = A.Compose([
                  rotate=(-30, 30),
                  shear=(-10, 10),
                  mode=cv2.BORDER_REPLICATE,
-                 p=1),
+                 p=1.0),
 
         A.RandomBrightnessContrast(brightness_limit=0.2,
                                    contrast_limit=0.2,
                                    p=0.5),
 
         A.HorizontalFlip(p=0.5),
+
+        A.Resize(height=224, width=224, interpolation=cv2.INTER_AREA, p=1.0),
+
     ],
+
+    keypoint_params=A.KeypointParams(format='xy'))
+
+resize = A.Compose([
+
+        A.Resize(height=224, width=224, interpolation=cv2.INTER_AREA, p=1.0),
+
+        ],
 
     keypoint_params=A.KeypointParams(format='xy'))
 
@@ -53,23 +81,22 @@ for fold in range(10):
     fold = str(fold)
 
     train_fold_path = os.path.join(folds_path, fold, 'Train')
+    test_fold_path = os.path.join(folds_path, fold, 'Test')
     os.mkdir(os.path.join(train_fold_path, 'Landmarks'))
+    os.mkdir(os.path.join(test_fold_path, 'Landmarks'))
 
+    print('Applying to Test Set')
+    for file_name in tqdm(os.listdir(test_fold_path)):
+        if '.jpg' in file_name:
+            _ = resize_original_img(test_fold_path, file_name)
+            
+
+    print('Applying to Train Set')
     for file_name in tqdm(os.listdir(train_fold_path)):
         if '.jpg' in file_name:
-            # Read image
-            img = cv2.imread(os.path.join(train_fold_path, file_name))
-            # Get correspondent Face and Landmarks coordinates
-            face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
-            landmarks_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['landmarks_coordinates'].values[0]
-            # Scale the landmarks to the cropped face
-            scaled_landmarks = [scale_coords(x, y, face_coords[0], face_coords[1]) for x, y in landmarks_coords]# Save landmarks
-            landmarks_file = open(os.path.join(train_fold_path, 'Landmarks', file_name.split('.jpg')[0]), 'wb')
-            pickle.dump(scaled_landmarks, landmarks_file)
-            landmarks_file.close()
+            img, scaled_landmarks = resize_original_img(train_fold_path, file_name)
 
             for i in range(20):
-
                 transformed = transform(image=img, keypoints=scaled_landmarks)
                 # Keep generating images until all landmarks are present
                 while len(transformed['keypoints']) < 5:
