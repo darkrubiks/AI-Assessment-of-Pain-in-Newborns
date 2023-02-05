@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 
-class NBDataset(Dataset):
+class NBDatasetVGGFace(Dataset):
     """
     Load only the images with its respective labels. The images are normalized
     to VGGFace format.
@@ -45,7 +45,7 @@ class NBDataset(Dataset):
         return len(os.listdir(self.path)) - 1 #-1 because of the landmarks folder
 
     def __getitem__(self, idx):
-        image = cv2.imread(self.img_names[idx]) # Load BGR to VGG Face 
+        image = cv2.imread(self.img_names[idx]) # Load BGR image to VGGFace 
         image = image/255 # Normalize to [0-1]
         image = self.transform(image) # Apply Normalization based on VGGFace
 
