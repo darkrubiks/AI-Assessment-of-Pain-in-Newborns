@@ -10,6 +10,7 @@ images.
 import os
 import glob
 import cv2
+import numpy as np
 from torch.utils.data import Dataset
 from torchvision import transforms
 
@@ -47,6 +48,7 @@ class NBDatasetVGGFace(Dataset):
     def __getitem__(self, idx):
         image = cv2.imread(self.img_names[idx]) # Load BGR image to VGGFace 
         image = image/255 # Normalize to [0-1]
+        image = np.float32(image)
         image = self.transform(image) # Apply Normalization based on VGGFace
 
         label = self.labels[idx]
