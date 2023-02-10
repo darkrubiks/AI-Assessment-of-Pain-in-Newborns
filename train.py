@@ -9,7 +9,7 @@ train_dataset = NBDatasetVGGFace('Datasets\\Folds', '0', 'Train')
 test_dataset = NBDatasetVGGFace('Datasets\\Folds', '0', 'Test')
 
 train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-test_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=True)
 
 class VGGNB(nn.Module):
     def __init__(self):
@@ -42,6 +42,9 @@ class VGGNB(nn.Module):
 
         return x
     
+    def predict(self, x):
+        return F.softmax(self.forward(x))
+    
 model = VGGNB()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -53,8 +56,8 @@ model.to(device)
 
 for epoch in range(25):
     for i, batch in enumerate(train_dataloader, 0):
-        images = batch['image']
-        labels = batch['label']
+        images = batch['image'].to(device)
+        labels = batch['label'].to(device)
 
         optimizer.zero_grad()
 
