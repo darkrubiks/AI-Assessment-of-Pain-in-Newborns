@@ -21,7 +21,7 @@ class VGGNBDataset(Dataset):
     to VGGFace format.
     """
 
-    def __init__(self, img_dir, fold, mode, dataset):
+    def __init__(self, img_dir, fold, mode):
         self.img_dir = img_dir
         self.fold = fold
         self.mode = mode
