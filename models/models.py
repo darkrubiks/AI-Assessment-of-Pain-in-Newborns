@@ -1,6 +1,15 @@
+"""
+models.py
+
+Author: Leonardo Antunes Ferreira
+Date:13/02/2022
+
+This file contains all the models used during the project.
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 class VGGNB(nn.Module):
     def __init__(self):
