@@ -6,6 +6,7 @@ Date:13/02/2022
 
 This file contains all the models used during the project.
 """
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,7 +16,7 @@ class VGGNB(nn.Module):
     def __init__(self):
         super(VGGNB, self).__init__()
 
-        self.VGGFace = torch.load('models\\VGG_face_original_model.pt')
+        self.VGGFace = torch.load(os.path.join('models','VGG_face_original_model.pt'))
 
         for param in self.VGGFace.parameters():
             param.requires_grad  = False

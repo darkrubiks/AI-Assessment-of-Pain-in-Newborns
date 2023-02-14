@@ -7,6 +7,7 @@ Date:13/02/2022
 Code for training a Deep Learning model to classify pain and no-pain face images
 of newborns
 """
+import os
 import time
 import torch
 import torch.nn as nn
@@ -17,8 +18,8 @@ from models.models import VGGNB
 
 
 # Load the Dataset
-train_dataset = VGGNBDataset('Datasets\\Folds', '0', 'Train')
-test_dataset = VGGNBDataset('Datasets\\Folds', '0', 'Test')
+train_dataset = VGGNBDataset(os.path.join('Datasets','Folds'), '0', 'Train')
+test_dataset = VGGNBDataset(os.path.join('Datasets','Folds'), '0', 'Test')
 # Batch and Shuffle the Dataset
 train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=True)
