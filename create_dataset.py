@@ -17,8 +17,8 @@ from tqdm import tqdm
 iCOPE_UNIFESP_data = pd.read_csv('iCOPE+UNIFESP_data.csv')
 UNIFESP_percep_data = pd.read_csv('UNIFESP_percep_heatmaps.csv')
 
-path_original_dataset = 'Datasets\\Originais\\'
-path_new_dataset = 'Datasets\\NewDataset\\'
+path_original_dataset = os.path.join('Datasets','Originais')
+path_new_dataset = os.path.join('Datasets','NewDataset')
 
 try:
     rmtree(path_new_dataset)
