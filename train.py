@@ -14,7 +14,7 @@ import torch.nn as nn
 from torch.optim import RMSprop
 from torch.utils.data import  DataLoader
 from dataset_maker import VGGNBDataset
-from models.models import VGGNB
+from models.VGGNB import VGGNB
 
 
 # Load the Dataset
