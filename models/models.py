@@ -1,10 +1,21 @@
 """
-models.py
+VGGNB.py
 
 Author: Leonardo Antunes Ferreira
 Date:13/02/2022
 
-This file contains all the models used during the project.
+This file contains the VGGNB model implemented by:
+
+Leonardo A. Ferreira, University Center of FEI,São Bernardo do Campo SP,Brazil  
+Lucas P. Carlini, University Center of FEI,São Bernardo do Campo SP,Brazil  
+Gabriel A. S. Coutrin, University Center of FEI,São Bernardo do Campo SP,Brazil  
+Victor V. Varoto, University Center of FEI,São Bernardo do Campo SP,Brazil 
+
+on "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal 
+Pain Assessment" in 2021 34th SIBGRAPI.
+
+doi: 10.1109/SIBGRAPI54419.2021.00060
+
 """
 import os
 import torch
