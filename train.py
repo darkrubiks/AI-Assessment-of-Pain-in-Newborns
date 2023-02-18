@@ -7,6 +7,7 @@ Date:13/02/2022
 Code for training a Deep Learning model to classify pain and no-pain face images
 of newborns
 """
+import argparse
 import os
 import time
 import torch
@@ -17,12 +18,21 @@ from dataset_maker import VGGNBDataset
 from models.VGGNB import VGGNB
 
 
+#  Argument Parser
+parser = argparse.ArgumentParser()
+parser.add_argument('--fold', type=str, default='0', help='Fold number')
+parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
+parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
+args = parser.parse_args()
+
 # Load the Dataset
-train_dataset = VGGNBDataset(os.path.join('Datasets','Folds'), '0', 'Train')
-test_dataset = VGGNBDataset(os.path.join('Datasets','Folds'), '0', 'Test')
+train_dataset = VGGNBDataset(os.path.join('Datasets','Folds'), args.fold, 'Train')
+test_dataset = VGGNBDataset(os.path.join('Datasets','Folds'), args.fold, 'Test')
 # Batch and Shuffle the Dataset
-train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=True)
+train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
 
 # Instantiate the VGGNB model
 model = VGGNB()
@@ -31,16 +41,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Metrics
 criterion = nn.CrossEntropyLoss()
-optimizer = RMSprop(model.parameters(), lr=1e-5, weight_decay=1e-5)
+optimizer = RMSprop(model.parameters(), lr=args.lr, weight_decay=1e-5)
 
 model = model.to(device)
 
 since = time.time()
 
-num_epochs = 25 # Total training epochs
+num_epochs = args.epochs # Total training epochs
 
 # Define the stopping criterion
-patience = 5 # Number of epochs with no improvement
+patience = args.patience # Number of epochs with no improvement
 counter = 0 # Counter for the number of epochs with no improvement
 best_val_loss = float('inf')
 best_val_acc = float('inf')
