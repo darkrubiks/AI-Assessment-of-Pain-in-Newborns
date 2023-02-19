@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 from torch.optim import RMSprop
 from torch.utils.data import  DataLoader
+from sklearn.metrics import f1_score, precision_score, recall_score
 from dataset_maker import VGGNBDataset
 from models.VGGNB import VGGNB
 
@@ -49,11 +50,14 @@ since = time.time()
 
 num_epochs = args.epochs # Total training epochs
 
-# Define the stopping criterion
 patience = args.patience # Number of epochs with no improvement
 counter = 0 # Counter for the number of epochs with no improvement
+
 best_val_loss = float('inf')
 best_val_acc = float('inf')
+best_val_f1 = float('inf')
+best_val_precision = float('inf')
+best_val_recall = float('inf')
 
 dataloader = {'train':train_dataloader, 'test':test_dataloader}
 dataset_sizes = {'train':len(train_dataset), 'test':len(test_dataset)}
@@ -107,6 +111,9 @@ for epoch in range(num_epochs):
             if epoch_loss < best_val_loss:
                 best_val_loss = epoch_loss
                 best_val_acc = epoch_acc
+                best_val_f1 = f1_score(labels.cpu(), preds.cpu())
+                best_val_precision = precision_score(labels.cpu(), preds.cpu())
+                best_val_recall = recall_score(labels.cpu(), preds.cpu())
                 counter = 0
                 torch.save(model.state_dict(), 'best_model.pt')
             else:
@@ -122,3 +129,6 @@ for epoch in range(num_epochs):
 time_elapsed = time.time() - since
 print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
 print(f'Best test Acc: {best_val_acc:4f}')
+print(f'F1 Score: {best_val_f1:.4f}')
+print(f'Precision Score: {best_val_precision:.4f}')
+print(f'Recall Score: {best_val_recall:.4f}')
