@@ -34,20 +34,24 @@ class VGGNB(nn.Module):
 
         self.VGGFaceFeatures = self.VGGFace.features
 
-        self.Dropout = nn.Dropout(0.5)
+        self.classifier = nn.Sequential(
+            
+            nn.Linear(512 * 7 * 7, 512),
 
-        self.FC1 = nn.Linear(512 * 7 * 7, 512)
-        self.FC2 = nn.Linear(512, 512)
-        self.output = nn.Linear(512, 2)
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, 512),
+
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, 2)
+            
+        )
 
     def forward(self, x):
         x = self.VGGFaceFeatures(x)
         x = x.view(-1, 512 * 7 *7)
-        x = F.relu(self.FC1(x))
-        x = self.Dropout(x)
-        x = F.relu(self.FC2(x))
-        x = self.Dropout(x)
-        x = self.output(x)
+        x = self.classifier(x)
 
         return x
     
