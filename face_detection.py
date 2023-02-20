@@ -40,7 +40,6 @@ face_coordinates = []
 landmark_coordinates = []
 
 for _, row in tqdm(dataframe.iterrows()):
-
     file_name = row['new_file_name']
 
     img = cv2.imread(os.path.join(dataset_path, file_name))
