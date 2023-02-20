@@ -47,8 +47,8 @@ for train_index, test_index in skf.split(subjects, datasets):
     test_datasets.append(datasets[test_index])
 
 # Copy the images for each fold into a new folder
-folds_path = 'Datasets\\Folds'
-dataset_path = 'Datasets\\DatasetFaces'
+folds_path = os.path.join('Datasets','Folds')
+dataset_path = os.path.join('Datasets','DatasetFaces')
 
 # Remove folder if present
 try:
@@ -66,18 +66,14 @@ for fold in range(n_folds):
     fold = str(fold)
 
     os.mkdir(os.path.join(folds_path, fold))
-
     os.mkdir(os.path.join(folds_path, fold, 'Train'))
-
     os.mkdir(os.path.join(folds_path, fold, 'Test'))
 
     print('Copying Train Subjects')
     for train_subject in tqdm(train_subjects[int(fold)]):
-
         file_names = dataframe[dataframe['new_subject']==train_subject]['new_file_name']
         
         for file_name in file_names:
-
             src = os.path.join(dataset_path, 'Images', file_name)
             dst = os.path.join(folds_path, fold, 'Train', file_name)
 
@@ -85,11 +81,9 @@ for fold in range(n_folds):
 
     print('Copying Test Subjects')
     for test_subject in tqdm(test_subjects[int(fold)]):
-
         file_names = dataframe[dataframe['new_subject']==test_subject]['new_file_name']
         
         for file_name in file_names:
-
             src = os.path.join(dataset_path, 'Images', file_name)
             dst = os.path.join(folds_path, fold, 'Test', file_name)
 

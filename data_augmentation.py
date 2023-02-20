@@ -71,7 +71,7 @@ iCOPE_UNIFESP_data = pd.read_csv('iCOPE+UNIFESP_data.csv')
 iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].apply(lambda x: literal_eval(x))
 iCOPE_UNIFESP_data['landmarks_coordinates'] = iCOPE_UNIFESP_data['landmarks_coordinates'].apply(lambda x: literal_eval(x))
 
-folds_path = 'Datasets\\Folds'
+folds_path = os.path.join('Datasets','Folds')
 
 # For each Fold the images are augmented 20 times, verifying that the landmarks
 # are still in bounds of the new image

@@ -15,11 +15,12 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 
-class NBDatasetVGGFace(Dataset):
+class VGGNBDataset(Dataset):
     """
     Load only the images with its respective labels. The images are normalized
     to VGGFace format.
     """
+
     def __init__(self, img_dir, fold, mode):
         self.img_dir = img_dir
         self.fold = fold
