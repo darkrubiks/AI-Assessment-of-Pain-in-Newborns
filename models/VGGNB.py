@@ -2,7 +2,7 @@
 VGGNB.py
 
 Author: Leonardo Antunes Ferreira
-Date:13/02/2022
+Date:13/02/2023
 
 This file contains the VGGNB model implemented by:
 
@@ -14,7 +14,7 @@ Victor V. Varoto, University Center of FEI,São Bernardo do Campo SP,Brazil
 on "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal 
 Pain Assessment" in 2021 34th SIBGRAPI.
 
-doi: 10.1109/SIBGRAPI54419.2021.00060
+doi: https://doi.org/10.1109/SIBGRAPI54419.2021.00060
 
 """
 import os
