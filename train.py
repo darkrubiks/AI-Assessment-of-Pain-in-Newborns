@@ -115,7 +115,7 @@ for epoch in range(num_epochs):
                 best_val_precision = precision_score(labels.cpu(), preds.cpu())
                 best_val_recall = recall_score(labels.cpu(), preds.cpu())
                 counter = 0
-                torch.save(model.state_dict(), 'best_model.pt')
+                torch.save(model, 'best_model.pt')
             else:
                 counter += 1
 
