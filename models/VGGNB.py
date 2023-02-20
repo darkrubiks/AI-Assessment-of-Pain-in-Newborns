@@ -56,4 +56,4 @@ class VGGNB(nn.Module):
         return x
     
     def predict(self, x):
-        return F.softmax(self.forward(x))
+        return F.softmax(self.forward(x), dim=1)
