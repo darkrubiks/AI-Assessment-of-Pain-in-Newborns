@@ -26,7 +26,7 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
 parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
-parser.add_argument('--fine_tune_conv', action='store_True', help='Fine tune the last conv layers')
+parser.add_argument('--fine_tune_conv', action='store_true', help='Fine tune the last conv layers')
 args = parser.parse_args()
 
 # Load the Dataset
@@ -128,7 +128,7 @@ for epoch in range(num_epochs):
         if args.fine_tune_conv and not fine_tune_flag:
             print('Starting fine tuning of the last conv. layers')
             for param in model.VGGFace.features[17:31].parameters():
-                param.requires_grad  = True
+                param.requires_grad = True
         
             fine_tune_flag = True
             counter = 0
