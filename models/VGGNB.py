@@ -24,13 +24,19 @@ import torch.nn.functional as F
 
 
 class VGGNB(nn.Module):
-    def __init__(self):
+    def __init__(self, fine_tune_conv=False):
         super(VGGNB, self).__init__()
 
+        self.fine_tune_conv = fine_tune_conv
         self.VGGFace = torch.load(os.path.join('models','VGG_face_original_model.pt'))
 
         for param in self.VGGFace.parameters():
             param.requires_grad  = False
+        
+        # Fine tune the last group of conv. layers.
+        if self.fine_tune_conv:
+            for param in self.VGGFace[17:31].parameters():
+                param.requires_grad  = True
 
         self.VGGFaceFeatures = self.VGGFace.features
 
