@@ -24,23 +24,16 @@ import torch.nn.functional as F
 
 
 class VGGNB(nn.Module):
-    def __init__(self, fine_tune_conv=False):
+    def __init__(self):
         super(VGGNB, self).__init__()
 
-        self.fine_tune_conv = fine_tune_conv
         self.VGGFace = torch.load(os.path.join('models','VGG_face_original_model.pt'))
 
         for param in self.VGGFace.parameters():
             param.requires_grad  = False
-        
-        # Fine tune the last group of conv. layers.
-        if self.fine_tune_conv:
-            for param in self.VGGFace[17:31].parameters():
-                param.requires_grad  = True
 
-        self.VGGFaceFeatures = self.VGGFace.features
-
-        self.classifier = nn.Sequential(
+        # Change classifier head to the proposed architecture.
+        self.VGGFace.classifier = nn.Sequential(
             
             nn.Linear(512 * 7 * 7, 512),
 
@@ -55,10 +48,7 @@ class VGGNB(nn.Module):
         )
 
     def forward(self, x):
-        x = self.VGGFaceFeatures(x)
-        x = x.view(-1, 512 * 7 *7)
-        x = self.classifier(x)
-
+        x = self.VGGFace(x)
         return x
     
     def predict(self, x):
