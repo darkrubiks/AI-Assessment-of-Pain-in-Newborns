@@ -26,6 +26,7 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
 parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
+parser.add_argument('--fine_tune_conv', type=bool, default=False, help='Fine tune the last conv layers')
 args = parser.parse_args()
 
 # Load the Dataset
@@ -52,6 +53,7 @@ num_epochs = args.epochs # Total training epochs
 
 patience = args.patience # Number of epochs with no improvement
 counter = 0 # Counter for the number of epochs with no improvement
+fine_tune_flag = False # Only used for fine tuning the last conv. layers
 
 best_val_loss = float('inf')
 best_val_acc = float('inf')
@@ -123,8 +125,16 @@ for epoch in range(num_epochs):
 
     # Check if the stopping criterion is met
     if counter >= patience:
-        print(f'Early stopping at epoch {epoch}')
-        break
+        if args.fine_tune_conv and not fine_tune_flag:
+            print('Starting fine tuning of the last conv. layers')
+            for param in model.VGGFace.features[17:31].parameters():
+                param.requires_grad  = True
+        
+            fine_tune_flag = True
+            counter = 0
+        else:
+            print(f'Early stopping at epoch {epoch}')
+            break
 
 time_elapsed = time.time() - since
 print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
