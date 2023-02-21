@@ -16,10 +16,10 @@ from torch.optim import RMSprop
 from torch.utils.data import  DataLoader
 from sklearn.metrics import f1_score, precision_score, recall_score
 from dataset_maker import VGGNBDataset
-from models.VGGNB import VGGNB
+from models import VGGNB
 
 
-#  Argument Parser
+# Argument Parser
 parser = argparse.ArgumentParser()
 parser.add_argument('--fold', type=str, default='0', help='Fold number')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
@@ -46,10 +46,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 criterion = nn.CrossEntropyLoss()
 optimizer = RMSprop(model.parameters(), lr=args.lr, weight_decay=1e-5)
 
-model = model.to(device)
-
-since = time.time()
-
 num_epochs = args.epochs # Total training epochs
 
 patience = args.patience # Number of epochs with no improvement
@@ -64,6 +60,9 @@ best_val_recall = float('inf')
 
 dataloader = {'train':train_dataloader, 'test':test_dataloader}
 dataset_sizes = {'train':len(train_dataset), 'test':len(test_dataset)}
+
+since = time.time()
+model = model.to(device)
 
 # Start Training and Testing
 for epoch in range(num_epochs):
@@ -118,7 +117,7 @@ for epoch in range(num_epochs):
                 best_val_precision = precision_score(labels.cpu(), preds.cpu())
                 best_val_recall = recall_score(labels.cpu(), preds.cpu())
                 counter = 0
-                torch.save(model.state_dict(), 'best_model.pt')
+                torch.save(model.state_dict(), os.path.join('models','best_model.pt'))
             else:
                 counter += 1
 
@@ -129,7 +128,7 @@ for epoch in range(num_epochs):
         if args.fine_tune_conv and not fine_tune_flag:
             print('Starting fine tuning of the last conv. layers')
             # Load the best model and reset optimizer
-            model.load_state_dict(torch.load('best_model.pt'))
+            model.load_state_dict(torch.load(os.path.join('models','best_model.pt')))
             optimizer = RMSprop(model.parameters(), lr=args.lr_ft, weight_decay=1e-5)
             # Unfreeze the last 2 groups of conv. layers
             for param in model.VGGFace.features[17:31].parameters():

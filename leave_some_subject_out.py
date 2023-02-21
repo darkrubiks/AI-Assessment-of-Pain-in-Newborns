@@ -40,7 +40,6 @@ n_folds = 10
 skf = StratifiedKFold(n_splits=n_folds)
 
 for train_index, test_index in skf.split(subjects, datasets):
-    
     train_subjects.append(subjects[train_index])
     test_subjects.append(subjects[test_index])
     train_datasets.append(datasets[train_index])
@@ -61,7 +60,6 @@ os.mkdir(folds_path)
 
 # For each fold create a folder containing Train and Test Images and Heatmaps
 for fold in range(n_folds):
-
     print(f'Creating Folder for fold {fold}')
     fold = str(fold)
 

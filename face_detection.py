@@ -18,8 +18,8 @@ from shutil import rmtree
 from tqdm import tqdm
 
 
-dataset_path = 'Datasets\\NewDataset\\Images\\'
-dataset_faces_path = 'Datasets\\DatasetFaces\\Images\\'
+dataset_path = os.path.join('Datasets','NewDataset','Images')
+dataset_faces_path = os.path.join('Datasets','DatasetFaces','Images')
 
 dataframe = pd.read_csv('iCOPE+UNIFESP_data.csv')
 
