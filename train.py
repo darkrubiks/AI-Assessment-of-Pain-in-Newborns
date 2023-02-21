@@ -24,9 +24,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--fold', type=str, default='0', help='Fold number')
 parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+parser.add_argument('--lr_ft', type=float, default=1e-6, help='Learning rate for fine tuning')
 parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
-parser.add_argument('--fine_tune_conv', action='store_true', help='Fine tune the last conv layers')
+parser.add_argument('--fine_tune_conv', action='store_true', help='Fine tune the last conv. layers')
 args = parser.parse_args()
 
 # Load the Dataset
@@ -127,6 +128,10 @@ for epoch in range(num_epochs):
     if counter >= patience:
         if args.fine_tune_conv and not fine_tune_flag:
             print('Starting fine tuning of the last conv. layers')
+            # Load the best model and reset optimizer
+            model.load_state_dict(torch.load('best_model.pt'))
+            optimizer = RMSprop(model.parameters(), lr=args.lr_ft, weight_decay=1e-5)
+            # Unfreeze the last 2 groups of conv. layers
             for param in model.VGGFace.features[17:31].parameters():
                 param.requires_grad = True
         
