@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from torch.optim import RMSprop
 from torch.utils.data import  DataLoader
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from dataset_maker import VGGNBDataset
 from models import VGGNB
 
@@ -113,9 +113,6 @@ for epoch in range(num_epochs):
             if epoch_loss < best_val_loss:
                 best_val_loss = epoch_loss
                 best_val_acc = epoch_acc
-                best_val_f1 = f1_score(labels.cpu(), preds.cpu())
-                best_val_precision = precision_score(labels.cpu(), preds.cpu())
-                best_val_recall = recall_score(labels.cpu(), preds.cpu())
                 counter = 0
                 torch.save(model.state_dict(), os.path.join('models','best_model.pt'))
             else:
@@ -142,6 +139,32 @@ for epoch in range(num_epochs):
 
 time_elapsed = time.time() - since
 print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
+
+# Run validation metrics for the best model
+print('-' * 10)
+print('Running validation metrics on the best model...')
+
+model.load_state_dict(torch.load(os.path.join('models','best_model.pt')))
+model.eval()
+
+labels = []
+preds = []
+
+for test_sample in test_dataset:
+    image = test_sample['image'].to(device)
+    label = test_sample['label'] # Already returns an int
+    # The torch.max function also returns the maximum value, but for now it is _
+    _, pred = torch.max(model.predict(image.unsqueeze(dim=0)), 1)
+
+    labels.append(label)
+    preds.append(pred.cpu().numpy())
+
+best_val_acc = accuracy_score(labels, preds)
+best_val_f1 = f1_score(labels, preds)
+best_val_precision = precision_score(labels, preds)
+best_val_recall = recall_score(labels, preds)
+
+print()
 print(f'Best test Acc: {best_val_acc:4f}')
 print(f'F1 Score: {best_val_f1:.4f}')
 print(f'Precision Score: {best_val_precision:.4f}')
