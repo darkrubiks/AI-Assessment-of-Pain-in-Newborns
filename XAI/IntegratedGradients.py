@@ -18,17 +18,16 @@ import torch.nn.functional as F
 
 
 class IntegratedGradients:
-    def __init__(self, model, n_steps):
+    def __init__(self, model):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = model.eval().to(self.device)
-        self.n_steps = n_steps
         
-    def __interpolate_image(self, baseline, image):
+    def __interpolate_image(self, baseline, image, n_steps):
         """
         Generates a linear interpolation between the baseline and the original
         image.
         """
-        alphas = torch.linspace(start=0.0, end=1.0, steps=self.n_steps+1).to(self.device)
+        alphas = torch.linspace(start=0.0, end=1.0, steps=n_steps+1).to(self.device)
         alphas_x = alphas[..., None, None, None]
 
         baseline_x = torch.unsqueeze(baseline, 0)
@@ -62,14 +61,14 @@ class IntegratedGradients:
 
         return integrated_gradients
 
-    def attribution_mask(self, baseline, image, target_class):
+    def attribution_mask(self, baseline, image, target_class, n_steps):
         """
         Generates the Integrated Gradients feature attributions.
         """
         image = image.to(self.device)
         baseline = baseline.to(self.device)
 
-        interpoleted = self.__interpolate_image(baseline, image)
+        interpoleted = self.__interpolate_image(baseline, image, n_steps)
         gradients = self.__compute_gradients(interpoleted, target_class)
         integrated_gradients = self.__integral_approximation(gradients)
         
