@@ -4,6 +4,10 @@ __pycache__
 # ignore datasets folder
 Datasets/
 
-# ignore this files
+# ignore large models files
+models/best_VGGNB.pt
+models/VGG_face_original_model.pt
+
+# ignore these files
 relatório.xlsx
 dataset_processing.py
