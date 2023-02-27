@@ -13,16 +13,21 @@ data skew, and debugging model performance.
 doi: https://doi.org/10.48550/arXiv.1703.01365
 
 """
+import numpy as np
 import torch
 import torch.nn.functional as F
 
 
 class IntegratedGradients:
-    def __init__(self, model):
+    def __init__(self, 
+                 model: torch.nn.Module) -> None:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = model.eval().to(self.device)
         
-    def __interpolate_image(self, baseline, image, n_steps):
+    def __interpolate_image(self,
+                            baseline: torch.Tensor,
+                            image: torch.Tensor,
+                            n_steps: int) -> torch.Tensor:
         """
         Generates a linear interpolation between the baseline and the original
         image.
@@ -39,7 +44,9 @@ class IntegratedGradients:
 
         return interpoleted
 
-    def __compute_gradients(self, image, target_class):
+    def __compute_gradients(self,
+                            image: torch.Tensor,
+                            target_class: int) -> torch.Tensor:
         """
         Calculates gradients in order to measure the relationship between changes
         to a feature and changes in the model's predictions.
@@ -51,7 +58,8 @@ class IntegratedGradients:
 
         return image.grad
 
-    def __integral_approximation(self, gradients):
+    def __integral_approximation(self,
+                                 gradients: torch.Tensor) -> torch.Tensor:
         """
         Computes the numerical approximation of an integral for Integrated
         Gradients using the Riemann Trapezoidal rule.
@@ -61,7 +69,11 @@ class IntegratedGradients:
 
         return integrated_gradients
 
-    def attribution_mask(self, baseline, image, target_class, n_steps):
+    def attribution_mask(self,
+                         baseline: torch.Tensor,
+                         image: torch.Tensor,
+                         target_class: int,
+                         n_steps: int) -> np.ndarray:
         """
         Generates the Integrated Gradients feature attributions.
         """

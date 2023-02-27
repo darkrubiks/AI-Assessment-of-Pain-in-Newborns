@@ -20,7 +20,10 @@ class VGGNBDataset(Dataset):
     Load only the images with its respective labels. The images are normalized
     to VGGFace format.
     """
-    def __init__(self, img_dir, fold, mode):
+    def __init__(self, 
+                img_dir: str, 
+                fold: str,
+                mode: str) -> None:
         self.img_dir = img_dir
         self.fold = fold
         self.mode = mode

@@ -4,17 +4,23 @@ attribution_mask_processing.py
 Author: Leonardo Antunes Ferreira
 Date:20/02/2023
 
-To enhance the visualisation of each attribution mask, we propose post-processing
+To enhance the visualization of each attribution mask, we propose post-processing
 steps to them, using computer vision techniques, enabling a more direct comparison
 with the heatmap of the areas observed by humans, filtering out the less relevant
 pixels of the input image.
 """
 import cv2
 import numpy as np
+from typing import Tuple
 from sklearn.cluster import KMeans
 
 
-def attribution_mask_processing(attribution_mask, n_clusters=5, ksize=11, sigma=0, alpha_thres=0.5):
+def attribution_mask_processing(attribution_mask: np.ndarray, 
+                                n_clusters: int=5, 
+                                ksize: int=11, 
+                                sigma: int=0, 
+                                alpha_thres: float=0.5) -> Tuple[np.ndarray, 
+                                                                 np.ndarray]:
     """
     Enhance the visualisation of an attribution mask.
     
@@ -47,7 +53,8 @@ def attribution_mask_processing(attribution_mask, n_clusters=5, ksize=11, sigma=
     result = cv2.GaussianBlur(result,(ksize,ksize), sigma)
     # Creates the alpha channel
     alpha_channel = np.ones(np.squeeze(result).shape, dtype=result.dtype)
-    alpha_channel[np.where(result <= result.mean() + result.std()*alpha_thres)[:2]] = 0
+    alpha_channel[np.where(result <= result.mean() + 
+                           result.std()*alpha_thres)[:2]] = 0
 
     return result, alpha_channel
 
