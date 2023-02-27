@@ -1,8 +1,13 @@
 import cv2
+import numpy as np
 import matplotlib.pyplot as plt
+from typing import List, Tuple
 
 
-def vis_keypoints(image, keypoints, color=(0,255,0), diameter=15):
+def vis_keypoints(image: np.ndarray, 
+                  keypoints: List[np.ndarray], 
+                  color: np.ndarray=[0,255,0], 
+                  diameter: int=15) -> None:
     """
     Plot keypoints on an image.
     """
@@ -16,7 +21,10 @@ def vis_keypoints(image, keypoints, color=(0,255,0), diameter=15):
     plt.imshow(image)
     plt.show()
 
-def scale_coords(x, y, x_new_origin, y_new_origin):
+def scale_coords(x: int, 
+                 y: int, 
+                 x_new_origin: int, 
+                 y_new_origin: int) -> Tuple[int, int]:
     """
     Scale coordinates based on a new origin.
     """
