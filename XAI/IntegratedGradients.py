@@ -11,7 +11,6 @@ It has many use cases including understanding feature importances, identifying
 data skew, and debugging model performance.
 
 doi: https://doi.org/10.48550/arXiv.1703.01365
-
 """
 import numpy as np
 import torch
@@ -52,9 +51,8 @@ class IntegratedGradients:
         to a feature and changes in the model's predictions.
         """
         image = image.requires_grad_()
-        logit = self.model(image)
-        probs = F.softmax(logit, 1)[:, target_class]
-        probs.sum().backward()
+        logit = self.model(image)[:, target_class]
+        logit.sum().backward()
 
         return image.grad
 
