@@ -86,4 +86,4 @@ class IntegratedGradients:
 
         heatmap = torch.abs(attribution.sum(dim=0))
 
-        return heatmap.detach().cpu().numpy()
+        return heatmap.detach().cpu().numpy().squeeze()
