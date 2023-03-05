@@ -36,7 +36,8 @@ def resize_original_img(path, file_name):
     return img, scaled_landmarks
 
 # Augmentation Pipeline, Affine transformation is always applied, the Horizontal
-# Flip and RandomBrightnessContrast are applied with a 50% chance
+# Flip and RandomBrightnessContrast are applied with a 50% chance. All images and
+# and keypoints are resized to 512x512 
 transform = A.Compose([
 
         A.Affine(scale=(0.70, 1.5),
@@ -52,7 +53,7 @@ transform = A.Compose([
 
         A.HorizontalFlip(p=0.5),
 
-        A.Resize(height=224, width=224, interpolation=cv2.INTER_AREA, p=1.0),
+        A.Resize(height=512, width=512, interpolation=cv2.INTER_CUBIC, p=1.0),
 
     ],
 
@@ -60,7 +61,7 @@ transform = A.Compose([
 
 resize = A.Compose([
 
-        A.Resize(height=224, width=224, interpolation=cv2.INTER_AREA, p=1.0),
+        A.Resize(height=512, width=512, interpolation=cv2.INTER_CUBIC, p=1.0),
 
         ],
 
@@ -109,9 +110,3 @@ for fold in range(10):
                 aug_landmarks_file = open(os.path.join(train_fold_path, 'Landmarks', aug_file_name.split('.jpg')[0]), 'wb')
                 pickle.dump(transformed['keypoints'], aug_landmarks_file)
                 aug_landmarks_file.close()
-
-
-
-
-
-    

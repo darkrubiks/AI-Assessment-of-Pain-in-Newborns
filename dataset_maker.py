@@ -41,6 +41,7 @@ class VGGNBDataset(Dataset):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
+            transforms.Resize((224,224)),
             transforms.Normalize(
                 mean=[0.36703529, 0.41083294, 0.50661294], std=[1, 1, 1])
         ])
@@ -57,4 +58,4 @@ class VGGNBDataset(Dataset):
         label = self.labels[idx]
         # Return a dictionary, later this dict can be updated to include more
         # information
-        return {'image': image, 'label':label}
+        return {'image':image, 'label':label}
