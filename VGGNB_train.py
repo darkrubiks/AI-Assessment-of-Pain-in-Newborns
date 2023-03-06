@@ -15,7 +15,7 @@ import torch.nn as nn
 from torch.optim import RMSprop
 from torch.utils.data import  DataLoader
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from dataset_maker import VGGNBDataset
+from dataloaders import VGGNBDataset
 from models import VGGNB
 
 
