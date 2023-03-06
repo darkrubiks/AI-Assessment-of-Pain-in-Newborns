@@ -1,11 +1,11 @@
 """
-train.py
+VGGNB_train.py
 
 Author: Leonardo Antunes Ferreira
-Date:13/02/2022
+Date: 13/02/2022
 
-Code for training a Deep Learning model to classify pain and no-pain face images
-of newborns
+Code for training the VGGNB model to classify pain and no-pain face images of 
+newborns.
 """
 import argparse
 import os
@@ -54,9 +54,6 @@ fine_tune_flag = False # Only used for fine tuning the last conv. layers
 
 best_val_loss = float('inf')
 best_val_acc = float('inf')
-best_val_f1 = float('inf')
-best_val_precision = float('inf')
-best_val_recall = float('inf')
 
 dataloader = {'train':train_dataloader, 'test':test_dataloader}
 dataset_sizes = {'train':len(train_dataset), 'test':len(test_dataset)}
@@ -125,7 +122,7 @@ for epoch in range(num_epochs):
         if args.fine_tune_conv and not fine_tune_flag:
             print('Starting fine tuning of the last conv. layers')
             # Load the best model and reset optimizer
-            model.load_state_dict(torch.load(os.path.join('models','best_model.pt')))
+            model.load_state_dict(torch.load(os.path.join('models','best_VGGNB.pt')))
             optimizer = RMSprop(model.parameters(), lr=args.lr_ft, weight_decay=1e-5)
             # Unfreeze the last 2 groups of conv. layers
             for param in model.VGGFace.features[17:31].parameters():
