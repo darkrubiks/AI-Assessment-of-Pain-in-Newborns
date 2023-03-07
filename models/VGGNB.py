@@ -15,7 +15,6 @@ on "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal
 Pain Assessment" in 2021 34th SIBGRAPI.
 
 doi: https://doi.org/10.1109/SIBGRAPI54419.2021.00060
-
 """
 import os
 import torch
@@ -24,7 +23,7 @@ import torch.nn.functional as F
 
 
 class VGGNB(nn.Module):
-    def __init__(self):
+    def __init__(self) -> None:
         super(VGGNB, self).__init__()
 
         self.VGGFace = torch.load(os.path.join('models','VGG_face_original_model.pt'))

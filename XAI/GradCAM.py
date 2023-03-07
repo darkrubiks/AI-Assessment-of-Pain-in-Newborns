@@ -80,7 +80,7 @@ class GradCAM:
         Resize the CAM mask to the original image size.
         """
         width, height = image.size(-1), image.size(-2)
-        resized_cam = cv2.resize(cam, (width, height))
+        resized_cam = cv2.resize(cam, (width, height), interpolation=cv2.INTER_CUBIC)
 
         return resized_cam
         
