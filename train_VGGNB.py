@@ -141,7 +141,7 @@ print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s'
 print('-' * 10)
 print('Running validation metrics on the best model...')
 
-model.load_state_dict(torch.load(os.path.join('models','best_model.pt')))
+model.load_state_dict(torch.load(os.path.join('models','best_VGGNB.pt')))
 model.eval()
 
 labels = []
