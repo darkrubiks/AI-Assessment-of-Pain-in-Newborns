@@ -39,12 +39,12 @@ class NCNNDataset(Dataset):
         return len(os.listdir(self.path)) - 1 #-1 because of the landmarks folder
 
     def __getitem__(self, idx):
-        image = cv2.imread(self.img_names[idx]) # Load BGR image to VGGFace 
+        image = cv2.imread(self.img_names[idx])
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = image/255 # Normalize to [0-1]
         image = np.float32(image)
-        image = self.transform(image) # Apply Normalization based on VGGFace
+        image = self.transform(image)
 
         label = self.labels[idx]
-        # Return a dictionary, later this dict can be updated to include more
-        # information
+        
         return {'image':image, 'label':label}

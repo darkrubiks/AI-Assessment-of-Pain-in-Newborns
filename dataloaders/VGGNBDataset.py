@@ -47,6 +47,5 @@ class VGGNBDataset(Dataset):
         image = self.transform(image) # Apply Normalization based on VGGFace
 
         label = self.labels[idx]
-        # Return a dictionary, later this dict can be updated to include more
-        # information
+       
         return {'image':image, 'label':label}
