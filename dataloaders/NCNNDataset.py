@@ -1,24 +1,15 @@
-"""
-dataset_maker.py
-
-Author: Leonardo Antunes Ferreira
-Date: 01/02/2023
-
-dataset_maker.py contains all the Dataset Classes needed to load the newborn
-images. 
-"""
 import os
 import glob
 import cv2
 import numpy as np
 from torch.utils.data import Dataset
-from torchvision import transforms
+from torchvision import transforms   
 
 
-class VGGNBDataset(Dataset):
+class NCNNDataset(Dataset):
     """
-    Load only the images with its respective labels. The images are normalized
-    to VGGFace format.
+    Load only the images with its respective labels. The images are resized and 
+    normalized according to the NCNN original implementation.
     """
     def __init__(self, 
                 img_dir: str, 
@@ -41,8 +32,7 @@ class VGGNBDataset(Dataset):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.36703529, 0.41083294, 0.50661294], std=[1, 1, 1])
+            transforms.Resize((120,120))
         ])
 
     def __len__(self):
@@ -57,4 +47,4 @@ class VGGNBDataset(Dataset):
         label = self.labels[idx]
         # Return a dictionary, later this dict can be updated to include more
         # information
-        return {'image': image, 'label':label}
+        return {'image':image, 'label':label}

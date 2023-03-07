@@ -86,8 +86,3 @@ for fold in range(n_folds):
             dst = os.path.join(folds_path, fold, 'Test', file_name)
 
             copyfile(src, dst)
-
-
-   
-
-
