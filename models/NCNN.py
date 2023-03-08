@@ -28,7 +28,7 @@ class NCNN(nn.Module):
         # Branch 2
         self.conv_2_1 = nn.Conv2d(3, 64, 5, 1, 2)
         self.maxpool_2_1 = nn.MaxPool2d(3, 3, 1)
-        self.conv_2_2 = nn.Conv2d(64, 64, 5, 1, 2)
+        self.conv_2_2 = nn.Conv2d(64, 64, 2, 1, 2)
         self.maxpool_2_2 = nn.MaxPool2d(3, 3, 1)
         self.dropout_2 = nn.Dropout(0.1)
         # Branch 3
