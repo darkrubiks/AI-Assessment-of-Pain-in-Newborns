@@ -5,7 +5,7 @@ __pycache__
 Datasets/
 
 # ignore large models files
-models/best_VGGNB.pt
+models/*.pt
 models/VGG_face_original_model.pt
 
 # ignore these files
