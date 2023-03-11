@@ -8,6 +8,15 @@ Inside this repository you will find the code needed to replicate most of our re
 
 * The use of XAI (eXplainable AI) methods in the clinical practice
 
+# **Table of Contents**
+
+ - [How to use this repository](#how-to-use-this-repository)
+    - [Requirements](#requirements)
+    - [Repository Structure](#repository-structure)
+    - [Running the code](#running-the-code)
+- [Publications](#publications)
+- [Authors](#authors)
+
 # **How to use this repository**
 ## **Requirements**
 First make sure to install all requirements from `requirements.txt`.
@@ -39,20 +48,20 @@ The main codes are on the root directory and can run from the command line or ou
 
 ## **Running the code**
 **Follow the instructions in order!**
-### **1. `create_dataset.py`**
+### **1. [`create_dataset.py`](create_dataset.py)**
 To run this code you will need the original datasets on `Datasets\Originais` and the `iCOPE+UNIFESP_data.csv` and `UNIFESP_percep_heatmaps.csv` files.
 It will create a new folder `Datasets\NewDataset` with the subdirectories `Images` and `Heatmaps`. All images and heatmaps will be renamed to a standardized name from the `.csv` files mentioned before.
 
-### **2. `face_detection.py`**
-To run this code you will need the newly created dataset on `Datasets\NewDataset` and the `iCOPE+UNIFESP_data.csv`. You will also need to follow the instructions on [InsightFace](https://github.com/deepinsight/insightface/tree/master/python-package) to download and intall the RetinaFace model. It will create a new folder `Datasets\Faces` with the face cropped from each image.
+### **2. [`face_detection.py`](face_detection.py)**
+To run this code you will need the newly created dataset on `Datasets\NewDataset` and the `iCOPE+UNIFESP_data.csv`. You will also need to follow the instructions on [InsightFace](https://github.com/deepinsight/insightface/tree/master/python-package) to download and install the RetinaFace model. It will create a new folder `Datasets\Faces` with the face cropped from each image.
 
-### **3. `leave_one_subject_out.py`**
+### **3. [`leave_one_subject_out.py`](leave_some_subject_out.py)**
 To run this code you will need the the `Datasets\Faces` folder and the `iCOPE+UNIFESP_data.csv`. It will create 10 folds with Train and Test sets using the leave-some-subject-out method, each fold will be stored on `Datasets\Folds\{fold_number}`
 
-### **4. `data_augmentation.py`**
+### **4. [`data_augmentation.py`](data_augmentation.py)**
 To run this code you will need the `Datasets\Folds` folder and the `iCOPE+UNIFESP_data.csv`. For each training image 20 new images will be created using data augmentation techniques. All images are resized to `512 x 512` and the facial landmarks are augmented as well and saved inside a folder `Datasets\Folds\0\Train\Landmarks` in the [pickle](https://docs.python.org/3/library/pickle.html) format.
 
-### **5. `train_{model}.py`**
+### **5. [`train_{model}.py`](train_VGGNB.py)**
 After the above steps, you can run the training code choosing from our VGGNB model or the NCNN model.
 ```
 $ python train_VGGNB.py --fold 0 --epochs 50 --patience 5 --lr 1e-5 --batch_size 16 --fine_tune_conv --lr_ft 1e-7
