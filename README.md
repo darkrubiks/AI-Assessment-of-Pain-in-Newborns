@@ -14,6 +14,7 @@ Inside this repository you will find the code needed to replicate most of our re
     - [Requirements](#requirements)
     - [Repository Structure](#repository-structure)
     - [Running the code](#running-the-code)
+- [Models](#models)
 - [Publications](#publications)
 - [Authors](#authors)
 
@@ -44,7 +45,7 @@ from XAI import IntegratedGradients
 from dataloader import *
 ```
 
-The main codes are on the root directory and can run from the command line or our favorite programming software.
+The main codes are on the root directory and can run from the command line or your favorite programming software.
 
 ## **Running the code**
 **Follow the instructions in order!**
@@ -70,11 +71,15 @@ $ python train_VGGNB.py --fold 0 --epochs 50 --patience 5 --lr 1e-5 --batch_size
 ### **6. `explain.py`**
 TODO
 
+# **Models**
+| Model  | Accuracy   | Precision  | Recall     | F1         | Trained On    |
+| :---:  | :---:      | :---:      | :---:      | :---:      | :---:         |
+| VGGNB  | 86.2% ± 7% | 85.9% ± 7% | 90.3% ± 9% | 87.7% ± 6% | iCOPE+UNIFESP |
+| NCNN   | 77.1% ± 7% | 74.6% ± 8% | 89.0% ± 9% | 80.8% ± 6% | iCOPE+UNIFESP |
 
-# Publications
+# **Publications**
 
-
-# Authors
+# **Authors**
 Developed and researched by:
 
 * [Leonardo Antunes Ferreia](https://www.linkedin.com/in/leonardoantunesferreira/) - FEI - Repository Author
