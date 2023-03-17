@@ -16,7 +16,6 @@ doi: https://doi.org/10.1109/IJCNN.2019.8851879
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms.functional as T
 
 
 class NCNN(nn.Module):
@@ -26,21 +25,57 @@ class NCNN(nn.Module):
         # Branch 1
         self.maxpool_1_1 = nn.MaxPool2d(10, 10, 0)
         # Branch 2
-        self.conv_2_1 = nn.Conv2d(3, 64, 5, 1, 2)
-        self.maxpool_2_1 = nn.MaxPool2d(3, 3, 1)
-        self.conv_2_2 = nn.Conv2d(64, 64, 2, 1, 2)
-        self.maxpool_2_2 = nn.MaxPool2d(3, 3, 1)
+        self.conv_2_1 = nn.Conv2d(in_channels=3,
+                                  out_channels=64,
+                                  kernel_size=5,
+                                  stride=1, 
+                                  padding=0)
+        
+        self.maxpool_2_1 = nn.MaxPool2d(kernel_size=3,
+                                        stride=3,
+                                        padding=0)
+        
+        self.conv_2_2 = nn.Conv2d(in_channels=64,
+                                  out_channels=64,
+                                  kernel_size=2,
+                                  stride=1,
+                                  padding=0)
+        
+        self.maxpool_2_2 = nn.MaxPool2d(kernel_size=3,
+                                        stride=3,
+                                        padding=0)
+        
         self.dropout_2 = nn.Dropout(0.1)
         # Branch 3
-        self.conv_3_1 = nn.Conv2d(3, 64, 5, 1, 2)
-        self.maxpool_3_1 = nn.MaxPool2d(10 ,10, 0)
+        self.conv_3_1 = nn.Conv2d(in_channels=3,
+                                  out_channels=64,
+                                  kernel_size=5,
+                                  stride=1,
+                                  padding=2)
+        
+        self.maxpool_3_1 = nn.MaxPool2d(kernel_size=10,
+                                        stride=10,
+                                        padding=0)
+        
         self.dropout_3 = nn.Dropout(0.1)
         # Merge Branch
-        self.conv_4 = nn.Conv2d(64 + 64 + 3, 64, 2, 1, 1, 2)
-        self.maxpool_4 = nn.MaxPool2d(2, 2, 0)
-        self.fc_4 = nn.Linear(6 * 6 * 64, 8)
+        self.conv_4 = nn.Conv2d(in_channels=64 + 64 + 3,
+                                out_channels=64,
+                                kernel_size=2, 
+                                stride=1,
+                                padding=0)
+        
+        self.maxpool_4 = nn.MaxPool2d(kernel_size=2, 
+                                      stride=2, 
+                                      padding=0)
+        
+        self.fc_4 = nn.Linear(in_features=5 * 5 * 64, 
+                              out_features=8)
+        
         self.dropout_4 = nn.Dropout(0.1)
-        self.output = nn.Linear(8, 2)
+
+        self.output = nn.Linear(in_features=8, 
+                                out_features=2)
 
     def branch_1(self, x):
         x = self.maxpool_1_1(x)
@@ -52,7 +87,6 @@ class NCNN(nn.Module):
         x = self.maxpool_2_1(x)
         x = F.leaky_relu(self.conv_2_2(x), 0.01)
         x = self.maxpool_2_2(x)
-        x = T.resize(x, 12)
         x = self.dropout_2(x)
 
         return x
@@ -68,7 +102,7 @@ class NCNN(nn.Module):
         x = torch.cat((x_1, x_2, x_3), dim=1)
         x = F.relu(self.conv_4(x))
         x = self.maxpool_4(x)
-        x = x.view(-1, 6 * 6 * 64)
+        x = x.view(-1, 5 * 5 * 64)
         x = F.relu(self.fc_4(x))
         x = self.dropout_4(x)
         x = self.output(x)
