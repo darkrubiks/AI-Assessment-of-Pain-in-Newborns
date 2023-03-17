@@ -16,6 +16,7 @@ Inside this repository you will find the code needed to replicate most of our re
     - [Running the code](#running-the-code)
 - [Models](#models)
 - [Publications](#publications)
+- [Awards](#awards)
 - [Authors](#authors)
 
 # **How to use this repository**
@@ -68,16 +69,26 @@ After the above steps, you can run the training code choosing from our VGGNB mod
 $ python train_VGGNB.py --fold 0 --epochs 50 --patience 5 --lr 1e-5 --batch_size 16 --fine_tune_conv --lr_ft 1e-7
 ```
 
-### **6. `explain.py`**
-TODO
+### **6. [`explain.py`](explain.py)**
+This is just an example file on how to run the XAI methods available in this repository. Inside the file you can find more instructions about how to use it.
+<img src="https://drive.google.com/file/d/1JJXIw0WQGLvtWfJ8M25BoY5_f-PW5kjz/view" alt="XAI Methods" width="500"/>
 
 # **Models**
-| Model  | Accuracy   | Precision  | Recall     | F1         | Trained On    |
+| **Model** | **Accuracy** | **Precision** | **Recall** | **F1** | **Trained On** |
 | :---:  | :---:      | :---:      | :---:      | :---:      | :---:         |
 | VGGNB  | 86.2% ± 7% | 85.9% ± 7% | 90.3% ± 9% | 87.7% ± 6% | iCOPE+UNIFESP |
 | NCNN   | 77.1% ± 7% | 74.6% ± 8% | 89.0% ± 9% | 80.8% ± 6% | iCOPE+UNIFESP |
 
 # **Publications**
+
+* Coutrin, Gabriel AS et al. "Convolutional neural networks for newborn pain assessment using face images: A quantitative and qualitative comparison." Proceedings of the 3rd International Conference on Medical Imaging and Computer-Aided Diagnosis, MICAD 2022. Springer LNEE, 2022.
+
+* Carlini, Lucas P., et al. "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal Pain Assessment." 2021 34th SIBGRAPI Conference on Graphics, Patterns and Images (SIBGRAPI). IEEE, 2021.
+
+# **Awards**
+* G. A. S. Coutrin, L. P. Carlini, L. A. Ferreira, V. V. Varoto and C. E. Thomaz. Development of a Mobile Application for Automatic Recognition of Facial Expression of Pain in Newborns, Municipal Week of Science, Technology and Innovation of Santo André, 8th. edition, October 2022.
+
+* L. P. Carlini, L. A. Ferreira, G. A. S. Coutrin, V. V. Varoto, R. Guinsburg and C. E. Thomaz. Developtment of a Mobile Convolutional Neural Network for Neonatal Pain Assessment, H-INNOVA Health Innovation Award (finalist group), 2nd edition, 2021.
 
 # **Authors**
 Developed and researched by:
