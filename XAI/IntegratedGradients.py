@@ -68,7 +68,6 @@ class IntegratedGradients:
         return integrated_gradients
 
     def attribution_mask(self,
-                         baseline: torch.Tensor,
                          image: torch.Tensor,
                          target_class: int,
                          n_steps: int) -> np.ndarray:
@@ -76,7 +75,7 @@ class IntegratedGradients:
         Generates the Integrated Gradients feature attributions.
         """
         image = image.to(self.device)
-        baseline = baseline.to(self.device)
+        baseline = torch.zeros(image.size()).to(self.device)
 
         interpoleted = self.__interpolate_image(baseline, image, n_steps)
         gradients = self.__compute_gradients(interpoleted, target_class)
