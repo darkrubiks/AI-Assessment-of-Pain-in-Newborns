@@ -34,16 +34,18 @@ class VGGNB(nn.Module):
         # Change classifier head to the proposed architecture.
         self.VGGFace.classifier = nn.Sequential(
             
-            nn.Linear(512 * 7 * 7, 512),
+            nn.Linear(in_features=512 * 7 * 7,
+                      out_features=512),
 
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(512, 512),
+            nn.Linear(in_features=512, 
+                      out_features=512),
 
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(512, 2)
-            
+            nn.Linear(in_features=512,
+                      out_features=2)
         )
 
     def forward(self, x):
