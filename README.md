@@ -71,6 +71,7 @@ $ python train_VGGNB.py --fold 0 --epochs 50 --patience 5 --lr 1e-5 --batch_size
 
 ### **6. [`explain.py`](explain.py)**
 This is just an example file on how to run the XAI methods available in this repository. Inside the file you can find more instructions about how to use it.
+
 <img src="https://drive.google.com/uc?export=view&id=1M8j1lmjlNeAforURnE865o6XtSnFOfvO" alt="XAI Methods" width="500"/>
 
 # **Models**
