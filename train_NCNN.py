@@ -33,7 +33,7 @@ train_dataset = NCNNDataset(os.path.join('Datasets','Folds'), args.fold, 'Train'
 test_dataset = NCNNDataset(os.path.join('Datasets','Folds'), args.fold, 'Test')
 # Batch and Shuffle the Dataset
 train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
+test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
 # Instantiate the VGGNB model
 model = NCNN()
