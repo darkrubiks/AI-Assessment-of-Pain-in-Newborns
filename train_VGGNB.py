@@ -111,7 +111,7 @@ for epoch in range(num_epochs):
                 best_val_loss = epoch_loss
                 best_val_acc = epoch_acc
                 counter = 0
-                torch.save(model.state_dict(), os.path.join('models','best_model.pt'))
+                torch.save(model.state_dict(), os.path.join('models','best_VGGNB.pt'))
             else:
                 counter += 1
 
