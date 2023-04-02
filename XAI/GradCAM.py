@@ -66,7 +66,7 @@ class GradCAM:
         # Weighted combination of forward activation maps
         cam = torch.sum(self.activations * weights[:, :, None, None], axis=1)
         cam = torch.clamp(cam, min=0)
-        cam = cam/torch.max(cam)
+        cam = cam / (torch.max(cam) + 1e-7)
         cam = cam.cpu().numpy().squeeze()
 
         return self.resize_mask(image, cam)
