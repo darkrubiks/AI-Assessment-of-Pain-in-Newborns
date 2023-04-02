@@ -15,7 +15,6 @@ This code is heavily inspired by https://github.com/jacobgil/pytorch-grad-cam
 """
 import cv2
 import torch
-import torch.nn.functional as F
 import numpy as np
 
 
@@ -61,9 +60,8 @@ class GradCAM:
 
         logit.backward(retain_graph=True)
 
-        # Neuron importance weights, apply ReLU to the weights because we are 
-        # only interested in the positive influence on the class of interest
-        weights = F.relu(torch.mean(self.gradients, axis=(2,3)))
+        # Neuron importance weights
+        weights = torch.mean(self.gradients, axis=(2,3))
 
         # Weighted combination of forward activation maps
         cam = torch.sum(self.activations * weights[:, :, None, None], axis=1)
