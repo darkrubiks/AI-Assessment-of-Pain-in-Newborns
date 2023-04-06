@@ -51,6 +51,7 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=F
 
 # Instantiate the VGGNB model
 model = NCNN()
+model_file_name = f'best_NCNN_fold_{args.fold}.pt'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -124,7 +125,7 @@ for epoch in range(num_epochs):
                 best_val_loss = epoch_loss
                 best_val_acc = epoch_acc
                 counter = 0
-                torch.save(model.state_dict(), os.path.join('models','best_NCNN.pt'))
+                torch.save(model.state_dict(), os.path.join('models', model_file_name))
             else:
                 counter += 1
 
@@ -144,7 +145,7 @@ print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s'
 print('-' * 10)
 print('Running validation metrics on the best model...')
 
-model.load_state_dict(torch.load(os.path.join('models','best_NCNN.pt')))
+model.load_state_dict(torch.load(os.path.join('models', model_file_name)))
 model.eval()
 
 labels = []
