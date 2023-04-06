@@ -13,6 +13,7 @@ import time
 import torch
 import torch.nn as nn
 from torch.optim import RMSprop
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import  DataLoader
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from dataloaders import NCNNDataset
@@ -26,6 +27,8 @@ parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
 parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
 parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
+parser.add_argument('--label-smoothing', type=float, default=0, help='Label smoothing epsilon')
+parser.add_argument('--cos-lr', action='store_true', help='Cosine annealing scheduler')
 args = parser.parse_args()
 
 # Load the Dataset
@@ -41,8 +44,10 @@ model = NCNN()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Metrics
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 optimizer = RMSprop(model.parameters(), lr=args.lr, weight_decay=1e-5)
+if args.cos_lr:
+    scheduler = CosineAnnealingLR(optimizer, T_max=5, eta_min=1e-6, verbose=False)
 
 num_epochs = args.epochs # Total training epochs
 
@@ -113,6 +118,8 @@ for epoch in range(num_epochs):
                 counter += 1
 
     print()
+    if args.cos_lr:
+        scheduler.step()
 
     # Check if the stopping criterion is met
     if counter >= patience:
