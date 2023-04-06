@@ -29,11 +29,22 @@ parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
 parser.add_argument('--label-smoothing', type=float, default=0, help='Label smoothing epsilon')
 parser.add_argument('--cos-lr', action='store_true', help='Cosine annealing scheduler')
+parser.add_argument('--cache', action='store_true', help='Cache images on RAM')
 args = parser.parse_args()
 
+# Set manual seed
+torch.manual_seed(0)
+
 # Load the Dataset
-train_dataset = NCNNDataset(os.path.join('Datasets','Folds'), args.fold, 'Train')
-test_dataset = NCNNDataset(os.path.join('Datasets','Folds'), args.fold, 'Test')
+train_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
+                            fold=args.fold,
+                            mode='Train',
+                            cache=args.cache)
+
+test_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
+                           fold=args.fold,
+                           mode='Test',
+                           cache=args.cache)
 # Batch and Shuffle the Dataset
 train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
