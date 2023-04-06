@@ -29,17 +29,29 @@ parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
 parser.add_argument('--label-smoothing', type=float, default=0, help='Label smoothing epsilon')
 parser.add_argument('--cos-lr', action='store_true', help='Cosine annealing scheduler')
+parser.add_argument('--cache', action='store_true', help='Cache images on RAM')
 args = parser.parse_args()
 
+# Set manual seed
+torch.manual_seed(0)
+
 # Load the Dataset
-train_dataset = NCNNDataset(os.path.join('Datasets','Folds'), args.fold, 'Train')
-test_dataset = NCNNDataset(os.path.join('Datasets','Folds'), args.fold, 'Test')
+train_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
+                            fold=args.fold,
+                            mode='Train',
+                            cache=args.cache)
+
+test_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
+                           fold=args.fold,
+                           mode='Test',
+                           cache=args.cache)
 # Batch and Shuffle the Dataset
 train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
 # Instantiate the VGGNB model
 model = NCNN()
+model_file_name = f'best_NCNN_fold_{args.fold}.pt'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -113,7 +125,7 @@ for epoch in range(num_epochs):
                 best_val_loss = epoch_loss
                 best_val_acc = epoch_acc
                 counter = 0
-                torch.save(model.state_dict(), os.path.join('models','best_NCNN.pt'))
+                torch.save(model.state_dict(), os.path.join('models', model_file_name))
             else:
                 counter += 1
 
@@ -133,7 +145,7 @@ print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s'
 print('-' * 10)
 print('Running validation metrics on the best model...')
 
-model.load_state_dict(torch.load(os.path.join('models','best_NCNN.pt')))
+model.load_state_dict(torch.load(os.path.join('models', model_file_name)))
 model.eval()
 
 labels = []
