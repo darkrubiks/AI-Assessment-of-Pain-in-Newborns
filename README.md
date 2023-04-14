@@ -75,26 +75,34 @@ To run this code you will need the the `Datasets\Faces` folder and the `iCOPE+UN
 
 To run this code you will need the `Datasets\Folds` folder and the `iCOPE+UNIFESP_data.csv`. For each training image 20 new images will be created using data augmentation techniques. All images are resized to `512 x 512` and the facial landmarks are augmented as well and saved inside a folder `Datasets\Folds\0\Train\Landmarks` in the [pickle](https://docs.python.org/3/library/pickle.html) format.
 
-#### **5. [`train_{model}.py`](train_VGGNB.py)**
+#### **5. Train the models**
 
 After the above steps, you can run the training code choosing from our models.
 
-#### **VGGNB**
+#### **[VGGNB](train_VGGNB.py)**
 
 ```text
 python train_VGGNB.py --fold 0 --epochs 50 --patience 5 --lr 1e-5 --batch_size 16 --fine_tune_conv --lr_ft 1e-7
 ```
 
-#### **NCNN**
+#### **[NCNN](train_NCNN.py)**
+
+NCNN
 
 ```text
 python train_NCNN.py --fold 0 --epochs 50 --patience 5 --lr 1e-4 --batch_size 16
 ```
 
-#### **NCNNv2**
+NCNNv2
 
 ```text
-python train_VGGNB.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --label-smoothing 0.3 --cos-lr
+python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --label-smoothing 0.3 --cos-lr
+```
+
+NCNNSoft
+
+```text
+python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --soft --cos-lr
 ```
 
 #### **6. [`explain.py`](explain.py)**
@@ -105,11 +113,12 @@ This is just an example file on how to run the XAI methods available in this rep
 
 ## **Models**
 
-| **Model** | **Accuracy** | **Precision** | **Recall** | **F1** | **Trained On** |
-| :---:  | :---:      | :---:      | :---:      | :---:      | :---:         |
-| VGGNB  | 85.2% ± 6% | 87.1% ± 7% | 79.6% ± 9% | 88.9% ± 6% | iCOPE+UNIFESP |
-| NCNNv2 | 82.8% ± 6% | 86.6% ± 9% | 74.7% ± 6% | 79.8% ± 5% | iCOPE+UNIFESP |
-| NCNN   | 78.7% ± 6% | 83.2% ± 8% | 69.0% ± 9% | 74.1% ± 6% | iCOPE+UNIFESP |
+| **Model** | **Accuracy** | **Precision** | **Recall** | **F1**     | **Trained On**|
+| :---:     | :---:        | :---:         | :---:      | :---:      | :---:         |
+| VGGNB     | 85.2% ± 6%   | 87.1% ± 7%    | 79.6% ± 9% | 88.9% ± 6% | iCOPE+UNIFESP |
+| NCNNv2    | 82.8% ± 6%   | 86.6% ± 9%    | 74.7% ± 6% | 79.8% ± 5% | iCOPE+UNIFESP |
+| NCNN      | 78.7% ± 6%   | 83.2% ± 8%    | 69.0% ± 9% | 74.1% ± 6% | iCOPE+UNIFESP |
+| NCNNSoft  | 77.7% ± 2%   | 72.3% ± 2%    | 83.8% ± 3% | 77.6% ± 2% | UNIFESP       |
 
 ## **Publications**
 
