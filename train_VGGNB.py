@@ -33,6 +33,8 @@ args = parser.parse_args()
 
 # Set manual seed
 torch.manual_seed(0)
+# Search for CUDA device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load the Dataset
 train_dataset = VGGNBDataset(img_dir=os.path.join('Datasets','Folds'), 
@@ -50,9 +52,9 @@ test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=F
 
 # Instantiate the VGGNB model
 model = VGGNB()
-model_file_name = f'best_VGGNB_fold_{args.fold}.pt'
+model = model.to(device)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model_file_name = f'best_VGGNB_fold_{args.fold}.pt'
 
 # Metrics
 criterion = nn.CrossEntropyLoss()
@@ -71,7 +73,6 @@ dataloader = {'train':train_dataloader, 'test':test_dataloader}
 dataset_sizes = {'train':len(train_dataset), 'test':len(test_dataset)}
 
 since = time.time()
-model = model.to(device)
 
 # Start Training and Testing
 for epoch in range(num_epochs):
