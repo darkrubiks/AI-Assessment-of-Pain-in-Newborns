@@ -77,12 +77,12 @@ class NCNN(nn.Module):
         self.output = nn.Linear(in_features=8, 
                                 out_features=2)
 
-    def branch_1(self, x):
+    def branch_left(self, x):
         x = self.maxpool_1_1(x)
 
         return x
     
-    def branch_2(self, x):
+    def branch_center(self, x):
         x = F.leaky_relu(self.conv_2_1(x), 0.01)
         x = self.maxpool_2_1(x)
         x = F.leaky_relu(self.conv_2_2(x), 0.01)
@@ -91,15 +91,15 @@ class NCNN(nn.Module):
 
         return x
 
-    def branch_3(self, x):
+    def branch_right(self, x):
         x = F.leaky_relu(self.conv_3_1(x), 0.01)
         x = self.maxpool_3_1(x)
         x = self.dropout_3(x)
 
         return x
     
-    def merge_branch(self, x_1, x_2, x_3):
-        x = torch.cat((x_1, x_2, x_3), dim=1)
+    def merge_branch(self, x_left, x_center, x_right):
+        x = torch.cat((x_left, x_center, x_right), dim=1)
         x = F.relu(self.conv_4(x))
         x = self.maxpool_4(x)
         x = x.view(-1, 5 * 5 * 64)
@@ -110,13 +110,18 @@ class NCNN(nn.Module):
         return x
 
     def forward(self, x):
-        x_1 = self.branch_1(x)
-        x_2 = self.branch_2(x)
-        x_3 = self.branch_3(x)
+        x_left = self.branch_left(x)
+        x_center = self.branch_center(x)
+        x_right = self.branch_right(x)
 
-        x = self.merge_branch(x_1, x_2, x_3)
+        x = self.merge_branch(x_left, x_center, x_right)
         
         return x
     
     def predict(self, x):
         return F.softmax(self.forward(x), dim=1)
+    
+
+if __name__ == '__main__':
+    model = NCNN()
+    print(model)
