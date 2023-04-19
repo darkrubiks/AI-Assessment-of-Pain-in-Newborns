@@ -86,7 +86,7 @@ class NCNNDataset(Dataset):
             # Label encoding
             label = 1 if classe == 'pain' else 0
                 
-        return torch.Tensor(label)
+        return label
         
     def __del__(self):
         del self.labels_cached
