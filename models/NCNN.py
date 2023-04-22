@@ -22,9 +22,9 @@ class NCNN(nn.Module):
     def __init__(self) -> None:
         super(NCNN, self).__init__()
 
-        # Branch 1
+        # Left Branch
         self.maxpool_1_1 = nn.MaxPool2d(10, 10, 0)
-        # Branch 2
+        # Center Branch
         self.conv_2_1 = nn.Conv2d(in_channels=3,
                                   out_channels=64,
                                   kernel_size=5,
@@ -46,7 +46,7 @@ class NCNN(nn.Module):
                                         padding=0)
         
         self.dropout_2 = nn.Dropout(0.1)
-        # Branch 3
+        # Left Branch
         self.conv_3_1 = nn.Conv2d(in_channels=3,
                                   out_channels=64,
                                   kernel_size=5,
@@ -77,12 +77,12 @@ class NCNN(nn.Module):
         self.output = nn.Linear(in_features=8, 
                                 out_features=2)
 
-    def branch_left(self, x):
+    def left_branch(self, x):
         x = self.maxpool_1_1(x)
 
         return x
     
-    def branch_center(self, x):
+    def center_branch(self, x):
         x = F.leaky_relu(self.conv_2_1(x), 0.01)
         x = self.maxpool_2_1(x)
         x = F.leaky_relu(self.conv_2_2(x), 0.01)
@@ -91,7 +91,7 @@ class NCNN(nn.Module):
 
         return x
 
-    def branch_right(self, x):
+    def right_branch(self, x):
         x = F.leaky_relu(self.conv_3_1(x), 0.01)
         x = self.maxpool_3_1(x)
         x = self.dropout_3(x)
@@ -110,9 +110,9 @@ class NCNN(nn.Module):
         return x
 
     def forward(self, x):
-        x_left = self.branch_left(x)
-        x_center = self.branch_center(x)
-        x_right = self.branch_right(x)
+        x_left = self.left_branch(x)
+        x_center = self.center_branch(x)
+        x_right = self.right_branch(x)
 
         x = self.merge_branch(x_left, x_center, x_right)
         
@@ -120,8 +120,3 @@ class NCNN(nn.Module):
     
     def predict(self, x):
         return F.softmax(self.forward(x), dim=1)
-    
-
-if __name__ == '__main__':
-    model = NCNN()
-    print(model)
