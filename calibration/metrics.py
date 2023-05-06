@@ -1,5 +1,5 @@
 """
-calibration_metrics.py
+metrics.py
 
 Author: Leonardo Antunes Ferreira
 Date: 06/05/2023
@@ -13,14 +13,8 @@ Proceedings of the AAAI conference on artificial intelligence. 2015.
 doi: https://doi.org/10.1609/aaai.v29i1.9602
 """
 import numpy as np
+from calibration.calibrators import softmax
 
-
-def softmax(logits: np.ndarray) -> np.ndarray:
-    """
-    Returns the logits of a neural network as softmaxes probabilities.
-    """
-    e_x = np.exp(logits - np.max(logits))
-    return e_x / e_x.sum(axis=1, keepdims=1)
 
 def ECE(logits: np.ndarray,
         labels: np.ndarray,
