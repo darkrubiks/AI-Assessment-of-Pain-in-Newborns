@@ -13,16 +13,15 @@ Proceedings of the AAAI conference on artificial intelligence. 2015.
 doi: https://doi.org/10.1609/aaai.v29i1.9602
 """
 import numpy as np
-from calibration.calibrators import softmax
 
 
-def ECE(logits: np.ndarray,
+def ECE(probs: np.ndarray,
         labels: np.ndarray,
         n_bins: int=10) -> np.float32:
     """
     Calculates the Expected Calibration Error of a model.
 
-    The input to this metric is the logits of a model, NOT the softmax scores.
+    The input to this metric is the softmax scores.
 
     This divides the confidence outputs into equally-sized interval bins.
     In each bin, we compute the confidence gap:
@@ -36,9 +35,8 @@ def ECE(logits: np.ndarray,
     bin_lowers = bin_boundaries[:-1]
     bin_uppers = bin_boundaries[1:]
     
-    softmaxes = softmax(logits)
-    predictions = np.argmax(softmaxes, axis=1)
-    confidences = softmaxes[np.arange(len(predictions)), predictions]
+    predictions = np.argmax(probs, axis=1)
+    confidences = probs[np.arange(len(predictions)), predictions]
     accuracies = np.equal(predictions, labels)
 
     ece = 0
@@ -53,13 +51,13 @@ def ECE(logits: np.ndarray,
 
     return ece
 
-def MCE(logits: np.ndarray,
+def MCE(probs: np.ndarray,
         labels: np.ndarray,
         n_bins: int=10) -> np.float32:
     """
     Calculates the Maximum Calibration Error of a model.
 
-    The input to this loss is the logits of a model, NOT the softmax scores.
+    The input to this loss is the softmax scores.
 
     This divides the confidence outputs into equally-sized interval bins.
     In each bin, we compute the confidence gap:
@@ -72,9 +70,8 @@ def MCE(logits: np.ndarray,
     bin_lowers = bin_boundaries[:-1]
     bin_uppers = bin_boundaries[1:]
     
-    softmaxes = softmax(logits)
-    predictions = np.argmax(softmaxes, axis=1)
-    confidences = softmaxes[np.arange(len(predictions)), predictions]
+    predictions = np.argmax(probs, axis=1)
+    confidences = probs[np.arange(len(predictions)), predictions]
     accuracies = np.equal(predictions, labels)
 
     mce = []
