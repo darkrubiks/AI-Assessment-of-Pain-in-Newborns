@@ -4,13 +4,7 @@ metrics.py
 Author: Leonardo Antunes Ferreira
 Date: 06/05/2023
 
-This file contains calibration metrics like ECE and MCE. For more information see:
-
-Naeini, Mahdi Pakdaman, Gregory Cooper, and Milos Hauskrecht. 
-"Obtaining well calibrated probabilities using bayesian binning." 
-Proceedings of the AAAI conference on artificial intelligence. 2015.
-
-doi: https://doi.org/10.1609/aaai.v29i1.9602
+This file contains metrics that can be used to validate the model's calibration.
 """
 import numpy as np
 
@@ -21,15 +15,25 @@ def ECE(probs: np.ndarray,
     """
     Calculates the Expected Calibration Error of a model.
 
-    The input to this metric is the softmax scores.
+    Parameters
+    ----------
+    probs : the softmax scores of both classes
 
-    This divides the confidence outputs into equally-sized interval bins.
-    In each bin, we compute the confidence gap:
+    labels : the true labels as binary targetes
 
-    bin_gap = | avg_confidence_in_bin - accuracy_in_bin |
+    n_bins : the number of bins to discretize
 
-    We then return a weighted average of the gaps, based on the number
-    of samples in each bin.
+    Returns
+    -------
+    ece : the Expected Calibration Error
+
+    See Also
+    --------
+    Naeini, Mahdi Pakdaman, Gregory Cooper, and Milos Hauskrecht. 
+    "Obtaining well calibrated probabilities using bayesian binning." 
+    Proceedings of the AAAI conference on artificial intelligence. 2015.
+
+    doi : https://doi.org/10.1609/aaai.v29i1.9602
     """
     bin_boundaries = np.linspace(0, 1, n_bins + 1)
     bin_lowers = bin_boundaries[:-1]
@@ -57,14 +61,25 @@ def MCE(probs: np.ndarray,
     """
     Calculates the Maximum Calibration Error of a model.
 
-    The input to this loss is the softmax scores.
+    Parameters
+    ----------
+    probs : the softmax scores of both classes
 
-    This divides the confidence outputs into equally-sized interval bins.
-    In each bin, we compute the confidence gap:
+    labels : the true labels as binary targetes
 
-    bin_gap = | avg_confidence_in_bin - accuracy_in_bin |
+    n_bins : the number of bins to discretize
 
-    We then return the maximum gap.
+    Returns
+    -------
+    ece : the Expected Calibration Error
+
+    See Also
+    --------
+    Naeini, Mahdi Pakdaman, Gregory Cooper, and Milos Hauskrecht. 
+    "Obtaining well calibrated probabilities using bayesian binning." 
+    Proceedings of the AAAI conference on artificial intelligence. 2015.
+
+    doi: https://doi.org/10.1609/aaai.v29i1.9602
     """
     bin_boundaries = np.linspace(0, 1, n_bins + 1)
     bin_lowers = bin_boundaries[:-1]
