@@ -7,7 +7,6 @@ Date: 06/05/2023
 This file contains metrics that can be used to validate the model's calibration.
 """
 import numpy as np
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
 def ECE(probs: np.ndarray,
