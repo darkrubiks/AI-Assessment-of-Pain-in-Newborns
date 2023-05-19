@@ -7,6 +7,7 @@ Date: 06/05/2023
 This file contains metrics that can be used to validate the model's calibration.
 """
 import numpy as np
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
 def ECE(probs: np.ndarray,
@@ -17,7 +18,7 @@ def ECE(probs: np.ndarray,
 
     Parameters
     ----------
-    probs : the softmax scores of both classes
+    probs : the predicted softmax scores of both classes
 
     labels : the true labels as binary targetes
 
@@ -63,7 +64,7 @@ def MCE(probs: np.ndarray,
 
     Parameters
     ----------
-    probs : the softmax scores of both classes
+    probs : the predicted softmax scores of both classes
 
     labels : the true labels as binary targetes
 
