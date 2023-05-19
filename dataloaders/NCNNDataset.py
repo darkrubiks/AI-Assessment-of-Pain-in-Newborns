@@ -14,12 +14,17 @@ class NCNNDataset(Dataset):
     Load only the images with its respective labels. The images are resized and 
     normalized according to the NCNN original implementation.
 
-    Args:
-        img_dir: The directory where the images are located
-        fold: Number of the Fold to run on
-        mode: Train or Test mode
-        soft: load labels as soft labels using the NFCS score
-        cache: If True it will cache all images in RAM for faster training
+    Parameters
+    ----------
+    img_dir : the directory where the images are located
+
+    fold : number of the Fold to run on
+
+    mode : train or Test mode
+
+    soft : load labels as soft labels using the NFCS score
+    
+    cache : if True it will cache all images in RAM for faster training
     """
     def __init__(self, 
                 img_dir: str, 

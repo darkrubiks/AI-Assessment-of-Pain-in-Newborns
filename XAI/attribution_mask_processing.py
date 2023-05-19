@@ -23,19 +23,26 @@ def attribution_mask_processing(attribution_mask: np.ndarray,
                                                                  np.ndarray]:
     """
     Enhance the visualisation of an attribution mask.
-    
-    inputs:
-        attribution_mask: the attribution mask produced by an XAI method
-        n_clusters: number of clusters to be considered on k-means
-        ksize: kernel size for the Gaussian Blur
-        sigma: kernel standard deviation for the Gaussian Blur
-        alpha_thres: the standard deviation threshold used for defining if the
-        pixel should be considered in the alpha channel
-    
-    returns:
-        res2: the attribution_mask post processed
-        alpha_channel: the alpha channel that can be applied to the image for 
-        masking out the pixels
+
+    Parameters
+    ----------
+    attribution_mask : the attribution mask produced by an XAI method
+
+    n_clusters : number of clusters to be considered on k-means
+
+    ksize : kernel size for the Gaussian Blur
+
+    sigma : kernel standard deviation for the Gaussian Blur
+
+    alpha_thres : the standard deviation threshold used for defining if the
+    pixel should be considered in the alpha channel
+
+    Returns
+    -------
+    res2 : the post processed attribution mask 
+
+    alpha_channel : the alpha channel that can be applied to the image for 
+    masking out the pixels
     """
     # Checks if the attribution_mask has 3 dimensions
     if len(attribution_mask.shape) <= 2:
