@@ -16,7 +16,7 @@ class NCNNDataset(Dataset):
 
     Args:
         img_dir: The directory where the images are located
-        fold: Number of the Fold to run on kkk
+        fold: Number of the Fold to run on
         mode: Train or Test mode
         soft: load labels as soft labels using the NFCS score
         cache: If True it will cache all images in RAM for faster training
