@@ -18,6 +18,24 @@ import torch.nn.functional as F
 
 
 class IntegratedGradients:
+    """
+    Integrated Gradients method.
+
+    Parameters
+    ----------
+    model : the model to be used
+
+    Returns
+    -------
+    heatmap : the attribution mask
+
+    See Also
+    --------
+    Sundararajan, Mukund, Ankur Taly, and Qiqi Yan. "Axiomatic attribution for 
+    deep networks." International conference on machine learning. PMLR, 2017.
+
+    doi: https://doi.org/10.48550/arXiv.1703.01365
+    """
     def __init__(self, 
                  model: torch.nn.Module) -> None:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'

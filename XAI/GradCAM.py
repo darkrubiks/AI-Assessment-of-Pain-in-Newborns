@@ -19,6 +19,26 @@ import numpy as np
 
 
 class GradCAM:
+    """
+    GradCAM method.
+
+    Parameters
+    ----------
+    model : the model to be used
+
+    target_layer : the target layer to be used
+
+    Returns
+    -------
+    cam : the attribution mask
+
+    See Also
+    --------
+    Selvaraju, Ramprasaath R., et al. "Grad-cam: Visual explanations from deep 
+    networks via gradient-based localization." IEEE. 2017.
+
+    doi: https://doi.org/10.48550/arXiv.1610.02391
+    """
     def __init__(self, 
                  model: torch.nn.Module,
                  target_layer: torch.nn.Module) -> None:

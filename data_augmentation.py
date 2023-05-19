@@ -91,7 +91,6 @@ for fold in range(10):
         if '.jpg' in file_name:
             _ = resize_original_img(test_fold_path, file_name)
             
-
     print('Applying to Train Set')
     for file_name in tqdm(os.listdir(train_fold_path)):
         if '.jpg' in file_name:
