@@ -93,13 +93,13 @@ NCNN
 python train_NCNN.py --fold 0 --epochs 50 --patience 5 --lr 1e-4 --batch_size 16
 ```
 
-NCNNv2
+Tuned - NCNN
 
 ```text
 python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --label-smoothing 0.3 --cos-lr
 ```
 
-NCNNSoft
+NFCS Soft Label - NCNN
 
 ```text
 python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --soft --cos-lr
@@ -113,12 +113,11 @@ This is just an example file on how to run the XAI methods available in this rep
 
 ## **Models**
 
-| **Model** | **Accuracy** | **Precision** | **Recall** | **F1**     | **Trained On**|
-| :---:     | :---:        | :---:         | :---:      | :---:      | :---:         |
-| VGGNB     | 85.2% ± 6%   | 87.1% ± 7%    | 79.6% ± 9% | 88.9% ± 6% | iCOPE+UNIFESP |
-| NCNNv2    | 82.8% ± 6%   | 86.6% ± 9%    | 74.7% ± 6% | 79.8% ± 5% | iCOPE+UNIFESP |
-| NCNN      | 78.7% ± 6%   | 83.2% ± 8%    | 69.0% ± 9% | 74.1% ± 6% | iCOPE+UNIFESP |
-| NCNNSoft  | 77.7% ± 2%   | 72.3% ± 2%    | 83.8% ± 3% | 77.6% ± 2% | UNIFESP       |
+| **Model**                | **Accuracy** | **Precision** | **Recall** | **F1**     | **Trained On**|
+| :---:                    | :---:        | :---:         | :---:      | :---:      | :---:         |
+| VGGNB                    | 85.2% ± 6%   | 87.1% ± 7%    | 79.6% ± 9% | 88.9% ± 6% | iCOPE+UNIFESP |
+| NCNN-Tuned               | 82.9% ± 5%   | 85.6% ± 8%    | 75.4% ± 9% | 79.7% ± 6% | iCOPE+UNIFESP |
+| NCNN                     | 78.7% ± 5%   | 83.2% ± 8%    | 69.0% ± 9% | 74.1% ± 6% | iCOPE+UNIFESP |
 
 ## **Publications**
 
