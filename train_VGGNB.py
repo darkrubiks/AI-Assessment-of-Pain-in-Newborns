@@ -28,6 +28,7 @@ parser.add_argument('--lr_ft', type=float, default=1e-6, help='Learning rate for
 parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
 parser.add_argument('--fine_tune_conv', action='store_true', help='Fine tune the last conv. layers')
+parser.add_argument('--soft', action='store_true', help='Use Soft Labels generated from NFCS. Only applies to UNIFESP dataset. Dont use with Label Smoothing!')
 parser.add_argument('--cache', action='store_true', help='Cache images on RAM')
 args = parser.parse_args()
 
@@ -39,7 +40,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Load the Dataset
 train_dataset = VGGNBDataset(img_dir=os.path.join('Datasets','Folds'), 
                              fold=args.fold,
-                             mode='Train', 
+                             mode='Train',
+                             soft=args.soft, 
                              cache=args.cache)
 
 test_dataset = VGGNBDataset(img_dir=os.path.join('Datasets','Folds'),
@@ -108,6 +110,8 @@ for epoch in range(num_epochs):
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
+                    if args.soft:
+                        _, labels = torch.max(labels, 1)
 
             # Statistics
             running_loss += loss.item() * inputs.size(0)

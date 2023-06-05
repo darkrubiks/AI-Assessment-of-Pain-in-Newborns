@@ -29,6 +29,7 @@ parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
 parser.add_argument('--patience', type=int, default=5, help='Early stopping patience')
 parser.add_argument('--label-smoothing', type=float, default=0, help='Label smoothing epsilon')
 parser.add_argument('--cos-lr', action='store_true', help='Cosine annealing scheduler')
+parser.add_argument('--soft', action='store_true', help='Use Soft Labels generated from NFCS. Only applies to UNIFESP dataset. Dont use with Label Smoothing!')
 parser.add_argument('--cache', action='store_true', help='Cache images on RAM')
 args = parser.parse_args()
 
@@ -41,6 +42,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 train_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
                             fold=args.fold,
                             mode='Train',
+                            soft=args.soft,
                             cache=args.cache)
 
 test_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
@@ -110,6 +112,8 @@ for epoch in range(num_epochs):
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
+                    if args.soft:
+                        _, labels = torch.max(labels, 1)
 
             # Statistics
             running_loss += loss.item() * inputs.size(0)
