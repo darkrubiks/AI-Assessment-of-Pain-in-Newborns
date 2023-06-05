@@ -55,7 +55,10 @@ class NCNNDataset(Dataset):
             self.path = os.path.join(self.img_dir, self.fold, 'Test')
 
         # Get only the files with *.jpg extension
-        self.img_names = glob.glob(os.path.join(self.path, '*.jpg'))
+        if self.soft:
+            self.img_names = glob.glob(os.path.join(self.path, '*_UNIFESP_*.jpg'))
+        else:
+            self.img_names = glob.glob(os.path.join(self.path, '*.jpg'))
 
         # Cache images on RAM
         if self.cache:
