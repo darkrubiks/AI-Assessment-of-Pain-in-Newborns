@@ -88,7 +88,7 @@ class IntegratedGradients:
     def attribution_mask(self,
                          image: torch.Tensor,
                          target_class: int,
-                         n_steps: int) -> np.ndarray:
+                         n_steps: int=50) -> np.ndarray:
         """
         Generates the Integrated Gradients feature attributions.
         """
@@ -102,5 +102,6 @@ class IntegratedGradients:
         attribution = (image - baseline) * integrated_gradients
 
         heatmap = torch.abs(attribution.sum(dim=0))
+        heatmap = heatmap.detach().numpy().squeeze()
 
-        return heatmap.detach().cpu().numpy().squeeze()
+        return heatmap
