@@ -171,7 +171,7 @@ best_val_precision = precision_score(labels, preds)
 best_val_recall = recall_score(labels, preds)
 
 print()
-print(f'Best test Acc: {best_val_acc:4f}')
+print(f'Best test Acc: {best_val_acc:.4f}')
 print(f'F1 Score: {best_val_f1:.4f}')
 print(f'Precision Score: {best_val_precision:.4f}')
 print(f'Recall Score: {best_val_recall:.4f}')
