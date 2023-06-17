@@ -68,11 +68,14 @@ class GradCAM:
 
     def attribution_mask(self, 
                          image: torch.Tensor, 
-                         target_class: int):
+                         target_class: int) -> np.ndarray:
         """
-        Generates the GradCAM attribution mask. The image needs to be in batch
-        format like (1, 3, 224, 224).
+        Generates the GradCAM attribution mask.
         """
+        if len(image.shape) != 4:
+            # Makes sure image is in batch shape.
+            image = image.unsqueeze(0)
+
         image = image.to(self.device).requires_grad_()
         logit = self.model(image)[:, target_class]
     
@@ -87,13 +90,13 @@ class GradCAM:
         cam = torch.sum(self.activations * weights[:, :, None, None], axis=1)
         cam = torch.clamp(cam, min=0)
         cam = cam / (torch.max(cam) + 1e-7)
-        cam = cam.cpu().numpy().squeeze()
+        cam = cam.detach().numpy().squeeze()
 
         return self.resize_mask(image, cam)
 
     def resize_mask(self,
                     image: torch.Tensor,
-                    cam: np.ndarray):
+                    cam: np.ndarray) -> np.ndarray:
         """
         Resize the CAM mask to the original image size.
         """
