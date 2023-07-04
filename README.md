@@ -105,12 +105,6 @@ NFCS Soft Label - NCNN
 python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --soft --cos-lr
 ```
 
-#### **6. [`explain.py`](explain.py)**
-
-This is just an example file on how to run the XAI methods available in this repository. Inside the file you can find more instructions about how to use it.
-
-<img src="https://drive.google.com/uc?export=view&id=1M8j1lmjlNeAforURnE865o6XtSnFOfvO" alt="XAI Methods" width="500"/>
-
 ## **Models**
 
 | **Model**                | **Accuracy** | **Precision** | **Recall** | **F1**     | **Trained On**|
