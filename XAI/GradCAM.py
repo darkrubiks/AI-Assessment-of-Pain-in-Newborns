@@ -32,6 +32,8 @@ class GradCAM:
     -------
     cam : the attribution mask
 
+    device : use CPU or CUDA device
+
     See Also
     --------
     Selvaraju, Ramprasaath R., et al. "Grad-cam: Visual explanations from deep 
@@ -41,8 +43,9 @@ class GradCAM:
     """
     def __init__(self, 
                  model: torch.nn.Module,
-                 target_layer: torch.nn.Module) -> None:
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                 target_layer: torch.nn.Module,
+                 device: str) -> None:
+        self.device = device
         self.model = model.eval().to(self.device)
         self.target_layer = target_layer
         self.activations = None
@@ -90,7 +93,7 @@ class GradCAM:
         cam = torch.sum(self.activations * weights[:, :, None, None], axis=1)
         cam = torch.clamp(cam, min=0)
         cam = cam / (torch.max(cam) + 1e-7)
-        cam = cam.detach().numpy().squeeze()
+        cam = cam.detach().cpu().numpy().squeeze()
 
         return self.resize_mask(image, cam)
 
