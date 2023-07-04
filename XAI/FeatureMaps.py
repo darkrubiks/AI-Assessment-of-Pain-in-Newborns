@@ -23,14 +23,17 @@ class FeatureMaps:
 
     target_layer : the target layer to be used
 
+    device : use CPU or CUDA device
+
     Returns
     -------
     feature_maps : a numpy array of feature maps
     """
     def __init__(self, 
                  model: torch.nn.Module,
-                 target_layer: torch.nn.Module) -> None:
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                 target_layer: torch.nn.Module,
+                 device: str) -> None:
+        self.device = device
         self.model = model.eval().to(self.device)
         self.target_layer = target_layer
         self.feature_maps = None
@@ -52,7 +55,7 @@ class FeatureMaps:
         image = image.to(self.device)
         _ = self.model(image)
         self.feature_maps = torch.clamp(self.feature_maps, min=0)
-        self.feature_maps = self.feature_maps.detach().numpy().squeeze()
+        self.feature_maps = self.feature_maps.detach().cpu().numpy().squeeze()
 
         return self.feature_maps
         

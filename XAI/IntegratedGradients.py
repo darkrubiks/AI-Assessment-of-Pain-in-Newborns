@@ -29,6 +29,8 @@ class IntegratedGradients:
     -------
     heatmap : the attribution mask
 
+    device : use CPU or CUDA device
+
     See Also
     --------
     Sundararajan, Mukund, Ankur Taly, and Qiqi Yan. "Axiomatic attribution for 
@@ -37,8 +39,9 @@ class IntegratedGradients:
     doi: https://doi.org/10.48550/arXiv.1703.01365
     """
     def __init__(self, 
-                 model: torch.nn.Module) -> None:
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                 model: torch.nn.Module,
+                 device: str) -> None:
+        self.device = device
         self.model = model.eval().to(self.device)
         
     def __interpolate_image(self,
@@ -102,6 +105,6 @@ class IntegratedGradients:
         attribution = (image - baseline) * integrated_gradients
 
         heatmap = torch.abs(attribution.sum(dim=0))
-        heatmap = heatmap.detach().numpy().squeeze()
+        heatmap = heatmap.detach().cpu().numpy().squeeze()
 
         return heatmap
