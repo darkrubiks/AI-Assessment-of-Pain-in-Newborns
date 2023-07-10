@@ -45,7 +45,7 @@ class NCNNDataset(Dataset):
         
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize((120,120))
+            transforms.Resize((120,120), antialias=False)
         ])
 
         # Load directory for train or test
