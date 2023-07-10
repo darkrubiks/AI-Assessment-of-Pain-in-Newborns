@@ -45,7 +45,7 @@ class VGGNBDataset(Dataset):
 
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize((224,224)),
+            transforms.Resize((224,224), antialias=False),
             transforms.Normalize(
                 mean=[0.36703529, 0.41083294, 0.50661294], std=[1, 1, 1])
         ])
