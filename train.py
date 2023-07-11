@@ -142,7 +142,7 @@ def main(args):
     since = time.time()
 
     # Training process
-    for epoch in range(args.epochs):
+    for epoch in range(1,args.epochs+1):
 
         # TQDM progress bar
         train_dataloader = tqdm(train_dataloader, unit=' batch', colour='#00ff00', smoothing=0)
@@ -151,12 +151,18 @@ def main(args):
         # Train function
         train(model, train_dataloader, criterion, optimizer, args)
 
+        # Close TQDM after its iteration
+        train_dataloader.close()
+
         # TQDM progress bar
         test_dataloader = tqdm(test_dataloader, unit=' batch', colour='#00ff00', smoothing=0)
         test_dataloader.set_description(f"Test - Epoch [{epoch}/{args.epochs}]")
         
         # Test function
         epoch_loss = test(model, test_dataloader, criterion, args)
+
+        # Close TQDM after its iteration
+        test_dataloader.close()
 
         # Model saving
         # TODO change to checkpoint?
