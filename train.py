@@ -23,7 +23,6 @@ from models import NCNN
 
 def load_dataset(args):
     # Load the Dataset
-    # TODO pin memory, num_workers
     train_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
                                 fold=args.fold,
                                 mode='Train',
@@ -36,8 +35,17 @@ def load_dataset(args):
                                cache=args.cache)
     
     # Batch and Shuffle the Dataset
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+    train_dataloader = DataLoader(train_dataset, 
+                                  batch_size=args.batch_size, 
+                                  shuffle=True,
+                                  num_workers=args.num_workers,
+                                  pin_memory=args.pin_memory)
+    
+    test_dataloader = DataLoader(test_dataset, 
+                                 batch_size=args.batch_size, 
+                                 shuffle=False,
+                                 num_workers=args.num_workers,
+                                 pin_memory=args.pin_memory)
 
     return train_dataloader, test_dataloader
 
@@ -190,6 +198,8 @@ if __name__=='__main__':
     parser.add_argument('--soft', action='store_true', help='Use Soft Labels generated from NFCS. Only applies to UNIFESP dataset. Dont use with Label Smoothing!')
     parser.add_argument('--cache', action='store_true', help='Cache images on RAM')
     parser.add_argument('--device', type=str, default='cpu', help='Which device to use "cpu" or "cuda"')
+    parser.add_argument('--pin_memory', action='store_true', help='Dataloader pinned memory function')
+    parser.add_argument('--num_workers', type=int, default=0, help='Number of worker to use in Dataloader')
     args = parser.parse_args()
 
     main(args)
