@@ -4,7 +4,7 @@ train.py
 Author: Leonardo Antunes Ferreira
 Date: 10/07/2022
 
-Code for training the Deep Learning models
+Code for training  Deep Learning models.
 """
 import argparse
 import os
@@ -14,11 +14,11 @@ import torch.nn as nn
 from torch.optim import RMSprop
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import  DataLoader
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from tqdm import tqdm
 
 from dataloaders import NCNNDataset
 from models import NCNN
+from validate import validation_metrics
 
 
 def load_dataset(args):
@@ -54,8 +54,8 @@ def train(model, dataloader, criterion, optimizer, args):
     model.train()
 
     running_loss = 0.0
-    running_corrects = 0
-    running_total = 0
+    preds_list = []
+    labels_list = []
 
     for i,batch in enumerate(dataloader, start=1):
         inputs = batch['image'].to(args.device)
@@ -79,20 +79,22 @@ def train(model, dataloader, criterion, optimizer, args):
 
         # Statistics
         running_loss += loss.item()
-        running_corrects += torch.sum(preds == labels).item()
-        running_total += labels.size(0)
+        preds_list += preds.cpu().numpy().tolist()
+        labels_list += labels.cpu().numpy().tolist()
+
+        metrics = validation_metrics(labels_list, preds_list)
+        metrics.update({'Loss': running_loss/i})
 
         # Update progress bar
-        dataloader.set_postfix(loss=running_loss/i, 
-                               acc=running_corrects/running_total)
+        dataloader.set_postfix(metrics)
 
 def test(model, dataloader, criterion, args):
     # Test for one epoch
     model.eval()
 
     running_loss = 0.0
-    running_corrects = 0
-    running_total = 0
+    preds_list = []
+    labels_list = []
 
     # Disable gradient computation and reduce memory consumption
     with torch.no_grad():
@@ -107,12 +109,14 @@ def test(model, dataloader, criterion, args):
 
             # Statistics
             running_loss += loss.item()
-            running_corrects += torch.sum(preds == labels.data).item()
-            running_total += labels.size(0)
+            preds_list += preds.cpu().numpy().tolist()
+            labels_list += labels.cpu().numpy().tolist()
+
+            metrics = validation_metrics(labels_list, preds_list)
+            metrics.update({'Loss': running_loss/i})
 
             # Update progress bar
-            dataloader.set_postfix(loss=running_loss/i, 
-                                   acc=running_corrects/running_total)
+            dataloader.set_postfix(metrics)
 
     return running_loss
 
@@ -209,6 +213,3 @@ if __name__=='__main__':
     args = parser.parse_args()
 
     main(args)
-
-
-
