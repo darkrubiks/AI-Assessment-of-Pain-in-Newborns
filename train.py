@@ -122,7 +122,7 @@ def test(model, dataloader, criterion, args):
 
 def main(args):
     # Instantiate the model
-    model = getattr(models, args.model)() # TODO accept any model
+    model = getattr(models, args.model)()
     model = model.to(args.device)
 
     # Filename to save the model
@@ -199,7 +199,7 @@ if __name__=='__main__':
     # Argument Parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, choices=['NCNN', 'VGGNB'], help='The model to be trained')
-    parser.add_argument('--fold', type=str, default='0', help='Fold number') #trocar para diretorio
+    parser.add_argument('--fold', type=str, default='0', help='Fold number') # TODO trocar para diretorio
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--epochs', type=int, default=25, help='Number of epochs')
