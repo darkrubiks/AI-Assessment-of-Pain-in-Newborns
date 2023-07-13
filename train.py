@@ -16,23 +16,23 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import  DataLoader
 from tqdm import tqdm
 
-from dataloaders import NCNNDataset
-from models import NCNN
+import dataloaders
+import models
 from validate import validation_metrics
 
 
 def load_dataset(args):
     # Load the Dataset
-    train_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
-                                fold=args.fold,
-                                mode='Train',
-                                soft=args.soft,
-                                cache=args.cache)
+    train_dataset = getattr(dataloaders, args.model+'Dataset')(img_dir=os.path.join('Datasets','Folds'),
+                                                               fold=args.fold,
+                                                               mode='Train',
+                                                               soft=args.soft,
+                                                               cache=args.cache)
 
-    test_dataset = NCNNDataset(img_dir=os.path.join('Datasets','Folds'),
-                               fold=args.fold,
-                               mode='Test',
-                               cache=args.cache)
+    test_dataset = getattr(dataloaders, args.model+'Dataset')(img_dir=os.path.join('Datasets','Folds'),
+                                                              fold=args.fold,
+                                                              mode='Test',
+                                                              cache=args.cache)
     
     # Batch and Shuffle the Dataset
     train_dataloader = DataLoader(train_dataset, 
@@ -122,7 +122,7 @@ def test(model, dataloader, criterion, args):
 
 def main(args):
     # Instantiate the model
-    model = NCNN() # TODO accept any model
+    model = getattr(models, args.model)() # TODO accept any model
     model = model.to(args.device)
 
     # Filename to save the model
@@ -198,6 +198,7 @@ if __name__=='__main__':
 
     # Argument Parser
     parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, choices=['NCNN', 'VGGNB'], help='The model to be trained')
     parser.add_argument('--fold', type=str, default='0', help='Fold number') #trocar para diretorio
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
