@@ -1,4 +1,5 @@
 import cv2
+import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
@@ -33,3 +34,11 @@ def scale_coords(x: int,
 
     return scaled_x, scaled_y
 
+def load_config(config_file: str) -> dict:
+    """
+    Loads a .yaml configuration file.
+    """
+    with open(config_file, 'r') as file:
+        config = yaml.safe_load(file)
+        
+    return config
