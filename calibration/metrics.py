@@ -9,19 +9,22 @@ This file contains metrics that can be used to validate the model's calibration.
 import numpy as np
 
 
-def ECE(probs: np.ndarray,
+def ECE(confs: np.ndarray,
         labels: np.ndarray,
-        n_bins: int=10) -> np.float32:
+        n_bins: int=10,
+        threshold: float=0.5) -> np.float32:
     """
     Calculates the Expected Calibration Error of a model.
 
     Parameters
     ----------
-    probs : the predicted softmax scores of both classes
+    probs : confidence on the positive class
 
-    labels : the true labels as binary targetes
+    labels : true labels as binary targets
 
-    n_bins : the number of bins to discretize
+    n_bins : number of bins to discretize
+
+    threshold : value in confidence to consider a sample as a positive class
 
     Returns
     -------
@@ -39,39 +42,41 @@ def ECE(probs: np.ndarray,
     bin_lowers = bin_boundaries[:-1]
     bin_uppers = bin_boundaries[1:]
     
-    predictions = np.argmax(probs, axis=1)
-    confidences = probs[np.arange(len(predictions)), predictions]
+    predictions = (confs>threshold).astype(float)
     accuracies = np.equal(predictions, labels)
 
     ece = 0
     for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
         # Calculated |confidence - accuracy| in each bin
-        in_bin = np.greater(confidences, bin_lower) * np.less(confidences, bin_upper)
+        in_bin = np.greater(confs, bin_lower) * np.less(confs, bin_upper)
         prop_in_bin = in_bin.mean()
         if prop_in_bin > 0:
             accuracy_in_bin = accuracies[in_bin].mean()
-            avg_confidence_in_bin = confidences[in_bin].mean()
+            avg_confidence_in_bin = confs[in_bin].mean()
             ece += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
 
     return ece
 
-def MCE(probs: np.ndarray,
+def MCE(confs: np.ndarray,
         labels: np.ndarray,
-        n_bins: int=10) -> np.float32:
+        n_bins: int=10,
+        threshold: float=0.5) -> np.float32:
     """
     Calculates the Maximum Calibration Error of a model.
 
     Parameters
     ----------
-    probs : the predicted softmax scores of both classes
+    confs : confidence on the positive class
 
-    labels : the true labels as binary targetes
+    labels : true labels as binary targetes
 
-    n_bins : the number of bins to discretize
+    n_bins : number of bins to discretize
+
+    threshold : value in confidence to consider a sample as a positive class
 
     Returns
     -------
-    ece : the Expected Calibration Error
+    mce : the Maximum Calibration Error
 
     See Also
     --------
@@ -85,18 +90,17 @@ def MCE(probs: np.ndarray,
     bin_lowers = bin_boundaries[:-1]
     bin_uppers = bin_boundaries[1:]
     
-    predictions = np.argmax(probs, axis=1)
-    confidences = probs[np.arange(len(predictions)), predictions]
+    predictions = (confs>threshold).astype(float)
     accuracies = np.equal(predictions, labels)
 
     mce = []
     for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
         # Calculated |confidence - accuracy| in each bin
-        in_bin = np.greater(confidences, bin_lower) * np.less(confidences, bin_upper)
+        in_bin = np.greater(confs, bin_lower) * np.less(confs, bin_upper)
         prop_in_bin = in_bin.mean()
         if prop_in_bin > 0:
             accuracy_in_bin = accuracies[in_bin].mean()
-            avg_confidence_in_bin = confidences[in_bin].mean()
+            avg_confidence_in_bin = confs[in_bin].mean()
             mce.append(np.abs(avg_confidence_in_bin - accuracy_in_bin))
 
     return max(mce)
