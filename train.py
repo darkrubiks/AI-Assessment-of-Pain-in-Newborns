@@ -14,12 +14,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as schedulers
 from torch.utils.data import  DataLoader
+from datetime import datetime
 from tqdm import tqdm
 
 import dataloaders
 import models
 from validate import validation_metrics
-from utils import load_config
+from utils import load_config, write_to_csv
 
 
 def load_dataset(config):
@@ -89,6 +90,8 @@ def train(model, dataloader, criterion, optimizer, config):
         # Update progress bar
         dataloader.set_postfix(metrics)
 
+    return metrics
+
 def test(model, dataloader, criterion, config):
     # Test for one epoch
     model.eval()
@@ -119,9 +122,15 @@ def test(model, dataloader, criterion, config):
             # Update progress bar
             dataloader.set_postfix(metrics)
 
-    return running_loss
+    return metrics
 
 def main(config):
+    # Define file_name to save epochs results
+    now = datetime.now()
+    timestamp = now.strftime('%Y%m%d_%H%M')
+    train_log = f"train_log_{config['model']}_{timestamp}.csv"
+    test_log = f"test_log_{config['model']}_{timestamp}.csv"
+
     # Instantiate the model
     model = getattr(models, config['model'])()
     model = model.to(config['device'])
@@ -154,7 +163,8 @@ def main(config):
         train_dataloader.set_description(f"Train - Epoch [{epoch}/{config['epochs']}]")
 
         # Train function
-        train(model, train_dataloader, criterion, optimizer, config)
+        train_metrics = train(model, train_dataloader, criterion, optimizer, config)
+        write_to_csv(train_log, **train_metrics)
 
         # Close TQDM after its iteration
         train_dataloader.close()
@@ -164,7 +174,8 @@ def main(config):
         test_dataloader.set_description(f"Test - Epoch [{epoch}/{config['epochs']}]")
         
         # Test function
-        epoch_loss = test(model, test_dataloader, criterion, config)
+        test_metrics = test(model, test_dataloader, criterion, config)
+        write_to_csv(test_log, **test_metrics)
 
         # Close TQDM after its iteration
         test_dataloader.close()
@@ -173,6 +184,7 @@ def main(config):
 
         # Model saving
         # TODO change to checkpoint?
+        epoch_loss = test_metrics['Loss']
         if epoch_loss < best_val_loss:
             best_val_loss = epoch_loss
             counter = 0
