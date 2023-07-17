@@ -26,9 +26,9 @@ def validation_metrics(labels: np.ndarray,
     metrics : a dictionary containing the metrics
     """
     acc = accuracy_score(labels, preds)
-    f1 = f1_score(labels, preds)
-    precision = precision_score(labels, preds)
-    recall = recall_score(labels, preds)
+    f1 = f1_score(labels, preds, zero_division=0)
+    precision = precision_score(labels, preds, zero_division=0)
+    recall = recall_score(labels, preds, zero_division=0)
 
     metrics = {'Accuracy': acc, 'F1 Score': f1, 'Precision': precision, 'Recall': recall}
 

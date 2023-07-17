@@ -25,16 +25,18 @@ from utils import load_config, write_to_csv
 
 def load_dataset(config):
     # Load the Dataset
-    train_dataset = getattr(dataloaders, config['model']+'Dataset')(img_dir=os.path.join('Datasets','Folds'),
-                                                               fold=config['fold'],
-                                                               mode='Train',
-                                                               soft=config['soft_label'],
-                                                               cache=config['cache'])
+    train_dataset = getattr(dataloaders, config['model']+'Dataset') \
+                           (img_dir=os.path.join('Datasets','Folds'),
+                            fold=config['fold'],
+                            mode='Train',
+                            soft=config['soft_label'],
+                            cache=config['cache'])
 
-    test_dataset = getattr(dataloaders, config['model']+'Dataset')(img_dir=os.path.join('Datasets','Folds'),
-                                                              fold=config['fold'],
-                                                              mode='Test',
-                                                              cache=config['cache'])
+    test_dataset = getattr(dataloaders, config['model']+'Dataset') \
+                          (img_dir=os.path.join('Datasets','Folds'),
+                           fold=config['fold'],
+                           mode='Test',
+                           cache=config['cache'])
     
     # Batch and Shuffle the Dataset
     train_dataloader = DataLoader(train_dataset, 
