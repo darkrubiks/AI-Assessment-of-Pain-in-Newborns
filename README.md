@@ -75,34 +75,14 @@ To run this code you will need the the `Datasets\Faces` folder and the `iCOPE+UN
 
 To run this code you will need the `Datasets\Folds` folder and the `iCOPE+UNIFESP_data.csv`. For each training image 20 new images will be created using data augmentation techniques. All images are resized to `512 x 512` and the facial landmarks are augmented as well and saved inside a folder `Datasets\Folds\0\Train\Landmarks` in the [pickle](https://docs.python.org/3/library/pickle.html) format.
 
-#### **5. Train the models**
+#### **5. [`train.py`](train.py)**
 
-After the above steps, you can run the training code choosing from our models.
+After the above steps, you can run the training code. First make sure to create or use one of the existing `.yaml` configuration files inside `models\configs`.
 
-#### **[VGGNB](train_VGGNB.py)**
-
-```text
-python train_VGGNB.py --fold 0 --epochs 50 --patience 5 --lr 1e-5 --batch_size 16 --fine_tune_conv --lr_ft 1e-7
-```
-
-#### **[NCNN](train_NCNN.py)**
-
-NCNN
+Inside the `.yaml` file you can choose any optimizer from PyTorch and set its hyperparameters on the `optimizer_hyp` field. The same applies to Learning Rate Schedulers. See `models\configs\config_Tuned_NCNN.yaml` for a full example.
 
 ```text
-python train_NCNN.py --fold 0 --epochs 50 --patience 5 --lr 1e-4 --batch_size 16
-```
-
-Tuned - NCNN
-
-```text
-python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --label-smoothing 0.3 --cos-lr
-```
-
-NFCS Soft Label - NCNN
-
-```text
-python train_NCNN.py --fold 0 --epochs 100 --patience 30 --lr 1e-3 --batch_size 16 --soft --cos-lr
+python train.py --config models\configs\config_NCNN.yaml
 ```
 
 ## **Models**

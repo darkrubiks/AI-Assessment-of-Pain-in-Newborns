@@ -1,0 +1,33 @@
+# config_NCNN.yaml
+
+# Model to be trained
+model: NCNN
+# Dataset path
+fold: '0'
+# Device configuration
+device: 'cuda'
+cache: False
+pin_memory: False
+num_workers: 0
+# Training Hyperparameters
+epochs: 120
+patience: 43
+batch_size: 16
+soft_label: False
+label_smoothing: 0.3
+optimizer: RMSprop
+optimizer_hyp:
+  lr: 0.0001
+  weight_decay: 0.00001
+scheduler: CosineAnnealingLR
+scheduler_hyp:
+  T_max: 5
+  eta_min: 0.000001
+
+
+
+
+
+
+
+

@@ -6,7 +6,7 @@ Datasets/
 images/
 
 # ignore large models files
-models/
+models/*.pt
 
 # ignore these files
 relatório.xlsx
