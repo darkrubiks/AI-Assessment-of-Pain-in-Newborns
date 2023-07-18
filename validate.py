@@ -10,15 +10,16 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
-def validation_metrics(labels: np.ndarray,
-                       preds: np.ndarray) -> dict:
+def validation_metrics(preds: np.ndarray,
+                       labels: np.ndarray) -> dict:
     """
-    Returns a dictionart with the following metrics: Accuracy,
-    F1 Socre, Precision, Recall.
+    Returns a dictionary with the following metrics: Accuracy,
+    F1 Score, Precision, Recall.
 
     Parameters
     ----------
     labels : the original labels for each sample
+
     preds : the predicted class for each sample
 
     Returns

@@ -77,7 +77,7 @@ To run this code you will need the `Datasets\Folds` folder and the `iCOPE+UNIFES
 
 #### **5. [`train.py`](train.py)**
 
-After the above steps, you can run the training code. First make sure to create or use one of the existing `.yaml` configuration files insisde `models\configs`.
+After the above steps, you can run the training code. First make sure to create or use one of the existing `.yaml` configuration files inside `models\configs`.
 
 Inside the `.yaml` file you can choose any optimizer from PyTorch and set its hyperparameters on the `optimizer_hyp` field. The same applies to Learning Rate Schedulers. See `models\configs\config_Tuned_NCNN.yaml` for a full example.
 
