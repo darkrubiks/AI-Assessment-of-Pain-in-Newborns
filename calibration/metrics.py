@@ -7,7 +7,7 @@ Date: 06/05/2023
 This file contains metrics that can be used to validate the model's calibration.
 """
 import numpy as np
-
+from sklearn.metrics import log_loss, brier_score_loss
 
 def ECE(confs: np.ndarray,
         labels: np.ndarray,
@@ -92,3 +92,49 @@ def MCE(confs: np.ndarray,
             mce.append(np.abs(avg_confidence_in_bin - fraction_of_postives_in_bin))
 
     return max(mce)
+
+def negative_log_likelihood(confs: np.ndarray,
+                            labels: np.ndarray) -> np.float32:
+    """
+    Calculates the Negative Log Likelihood.
+
+    Parameters
+    ----------
+    confs : confidence on the positive class
+
+    labels : true labels as binary targetes
+
+    Returns
+    -------
+    nll : the Negative Log Likelihood
+
+    See Also
+    --------
+    scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.metrics.log_loss.html
+    """
+    nll = log_loss(labels, confs)
+
+    return nll
+
+def brier_score(confs: np.ndarray, 
+                labels: np.ndarray) -> np.float32:
+    """
+    Calculates the Brier Score.
+
+    Parameters
+    ----------
+    confs : confidence on the positive class
+
+    labels : true labels as binary targetes
+
+    Returns
+    -------
+    brier : the Negative Log Likelihood
+
+    See Also
+    --------
+    scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html
+    """
+    brier = brier_score_loss(labels, confs)
+
+    return brier
