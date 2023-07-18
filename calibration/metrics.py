@@ -9,6 +9,7 @@ This file contains metrics that can be used to validate the model's calibration.
 import numpy as np
 from sklearn.metrics import log_loss, brier_score_loss
 
+
 def ECE(confs: np.ndarray,
         labels: np.ndarray,
         n_bins: int=10) -> np.float32:
@@ -61,7 +62,7 @@ def MCE(confs: np.ndarray,
     ----------
     confs : confidence on the positive class
 
-    labels : true labels as binary targetes
+    labels : true labels as binary targets
 
     n_bins : number of bins to discretize
 
@@ -102,7 +103,7 @@ def negative_log_likelihood(confs: np.ndarray,
     ----------
     confs : confidence on the positive class
 
-    labels : true labels as binary targetes
+    labels : true labels as binary targets
 
     Returns
     -------
@@ -125,7 +126,7 @@ def brier_score(confs: np.ndarray,
     ----------
     confs : confidence on the positive class
 
-    labels : true labels as binary targetes
+    labels : true labels as binary targets
 
     Returns
     -------
@@ -138,3 +139,46 @@ def brier_score(confs: np.ndarray,
     brier = brier_score_loss(labels, confs)
 
     return brier
+
+def calibration_curve(confs: np.ndarray,
+                      labels: np.ndarray,
+                      n_bins: int=10) -> np.ndarray:
+    """
+    Compute true and predicted probabilities for a calibration curve.
+
+    Adapted from scikitlearn to return the amount of positive class 
+    samples in each bin.
+
+    Parameters
+    ----------
+    confs : confidence on the positive class
+
+    labels : true labels as binary targets
+
+    n_bins : number of bins to discretize
+
+    Returns
+    -------
+    prob_true : the proportion of samples whose class is the positive class,
+    in eachbin (fraction of positives)
+
+    prob_pred : the mean predicted probability in each bin
+
+    bin_true : the amount of positive class samples in each bin
+
+    See Also
+    --------
+    scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.calibration.calibration_curve.html
+    """
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    binids = np.searchsorted(bins[1:-1], confs)
+
+    bin_sums = np.bincount(binids, weights=confs, minlength=len(bins))
+    bin_true = np.bincount(binids, weights=labels, minlength=len(bins))
+    bin_total = np.bincount(binids, minlength=len(bins))
+
+    nonzero = bin_total != 0
+    prob_true = bin_true[nonzero] / bin_total[nonzero]
+    prob_pred = bin_sums[nonzero] / bin_total[nonzero]
+    
+    return prob_true, prob_pred, bin_true
