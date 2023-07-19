@@ -164,7 +164,7 @@ def calibration_curve(confs: np.ndarray,
 
     prob_pred : the mean predicted probability in each bin
 
-    bin_true : the amount of positive class samples in each bin
+    bin_samples : the amount of confidence samples in each bin
 
     See Also
     --------
@@ -172,6 +172,7 @@ def calibration_curve(confs: np.ndarray,
     """
     bins = np.linspace(0.0, 1.0, n_bins + 1)
     binids = np.searchsorted(bins[1:-1], confs)
+    bin_samples = np.bincount(binids)
 
     bin_sums = np.bincount(binids, weights=confs, minlength=len(bins))
     bin_true = np.bincount(binids, weights=labels, minlength=len(bins))
@@ -181,4 +182,4 @@ def calibration_curve(confs: np.ndarray,
     prob_true = bin_true[nonzero] / bin_total[nonzero]
     prob_pred = bin_sums[nonzero] / bin_total[nonzero]
     
-    return prob_true, prob_pred, bin_true
+    return prob_true, prob_pred, bin_samples
