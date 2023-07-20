@@ -3,7 +3,7 @@ from typing import List
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
+from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
 
 from calibration.metrics import ECE, calibration_curve
 
@@ -61,7 +61,7 @@ def plot_confusion_matrix(preds: np.ndarray,
 
     labels : true labels as binary targets
 
-    classes : a list of classes names to use. The class names order 
+    classes : a list of class names to use. The class names order 
     should exactly match the ordinality of the labels and predictions.
     """
     cm = confusion_matrix(labels, preds)
@@ -105,3 +105,25 @@ def plot_roc_curve(confs: np.ndarray,
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Postive Rate')
     plt.savefig('roc_curve.png', dpi=300, bbox_inches='tight')
+
+
+def plot_pre_rec_curve(confs: np.ndarray,
+                       labels: np.ndarray) -> None:
+    """
+    Plots the Precision-Recall curve.
+
+    Parameters
+    ----------
+    confs : confidence on the positive class
+
+    labels : true labels as binary targets
+    """
+    precision, recall, _ = precision_recall_curve(labels, confs)
+
+    ap = average_precision_score(labels, confs)
+    
+    plt.plot(recall, precision)
+    plt.title(f'Precision-Recall Curve - AP = {ap:.4f}')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.savefig('precision_recall_curve.png', dpi=300, bbox_inches='tight')
