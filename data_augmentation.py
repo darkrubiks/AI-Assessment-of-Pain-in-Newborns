@@ -10,12 +10,14 @@ marks are also augmented.
 """
 import os
 import pickle
-import cv2
+from ast import literal_eval
+
 import albumentations as A
+import cv2
 import pandas as pd
 from tqdm import tqdm
-from ast import literal_eval
-from utils import *
+
+from utils.utils import scale_coords
 
 
 def resize_original_img(path, file_name):
