@@ -1,10 +1,11 @@
-import os
 import csv
-import cv2
-import yaml
-import numpy as np
-import matplotlib.pyplot as plt
+import os
 from typing import List, Tuple
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import yaml
 
 
 def vis_keypoints(image: np.ndarray, 
@@ -24,6 +25,7 @@ def vis_keypoints(image: np.ndarray,
     plt.imshow(image)
     plt.show()
 
+
 def scale_coords(x: int, 
                  y: int, 
                  x_new_origin: int, 
@@ -36,6 +38,7 @@ def scale_coords(x: int,
 
     return scaled_x, scaled_y
 
+
 def load_config(config_file: str) -> dict:
     """
     Loads a .yaml configuration file.
@@ -44,6 +47,7 @@ def load_config(config_file: str) -> dict:
         config = yaml.safe_load(file)
         
     return config
+
 
 def write_to_csv(filename, **kwargs):
     """
