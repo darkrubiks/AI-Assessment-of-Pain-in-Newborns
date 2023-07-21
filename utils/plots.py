@@ -16,6 +16,8 @@ matplotlib.rcParams['font.family'] = 'Times New Roman'
 matplotlib.rcParams['axes.spines.right'] = False
 matplotlib.rcParams['axes.spines.top'] = False
 
+COLOR = '#303eba'
+
 
 def plot_calibration_curve(confs: np.ndarray, 
                            labels: np.ndarray, 
@@ -47,13 +49,14 @@ def plot_calibration_curve(confs: np.ndarray,
         total_bins = bin_samples.sum()
         for i, bin in enumerate(bin_samples):
             plt.plot(prob_pred[i], prob_true[i], 
-                     marker='o', color='#c1272d', markersize=int((bin/total_bins)*100))
+                     marker='o', color=COLOR, markersize=int((bin/total_bins)*100))
 
-    plt.plot(prob_pred, prob_true,  linestyle='-', marker='o', color='#c1272d')
+    plt.plot(prob_pred, prob_true,  linestyle='-', marker='o', color=COLOR, label=f'ECE = {ece:.4f}')
     plt.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
-    plt.title(f'Calibration Curve - ECE = {ece:.4f}')
+    plt.title(f'Calibration Curve')
     plt.xlabel('Mean Predicted Confidence')
     plt.ylabel('Fraction of Positives')
+    plt.legend()
     plt.savefig(os.path.join(path,'calibration_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
@@ -118,10 +121,11 @@ def plot_roc_curve(confs: np.ndarray,
 
     auc = roc_auc_score(labels, confs)
 
-    plt.plot(fpr, tpr)
-    plt.title(f'ROC Curve - AUC = {auc:.4f}')
+    plt.plot(fpr, tpr, color=COLOR, label=f'AUC = {auc:.4f}')
+    plt.title(f'ROC Curve')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Postive Rate')
+    plt.legend()
     plt.savefig(os.path.join(path,'roc_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
@@ -145,10 +149,11 @@ def plot_pre_rec_curve(confs: np.ndarray,
 
     ap = average_precision_score(labels, confs)
     
-    plt.plot(recall, precision)
-    plt.title(f'Precision-Recall Curve - AP = {ap:.4f}')
+    plt.plot(recall, precision, color=COLOR, label=f'AP = {ap:.4f}')
+    plt.title(f'Precision-Recall Curve ')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
+    plt.legend()
     plt.savefig(os.path.join(path,'precision_recall_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
@@ -189,7 +194,7 @@ def plot_results_above_threshold(confs: np.ndarray,
 
         nonzero = np.array(above_threshold) != 0
         plt.figure()
-        plt.plot(threshold[nonzero], above_threshold[nonzero])
+        plt.plot(threshold[nonzero], above_threshold[nonzero], color=COLOR)
         plt.xlabel('Confidence Threshold')
         plt.ylabel(key)
         plt.savefig(os.path.join(path,f'{key}.png'), 
