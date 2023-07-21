@@ -9,18 +9,19 @@ Code for training Deep Learning models.
 import argparse
 import os
 import time
+from datetime import datetime
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as schedulers
-from torch.utils.data import  DataLoader
-from datetime import datetime
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import dataloaders
 import models
+from utils.utils import load_config, write_to_csv
 from validate import validation_metrics
-from utils import load_config, write_to_csv
 
 
 def load_dataset(config):
