@@ -3,7 +3,10 @@ from typing import List
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score
+from sklearn.metrics import (accuracy_score, average_precision_score,
+                             confusion_matrix, f1_score,
+                             precision_recall_curve, precision_score,
+                             recall_score, roc_auc_score, roc_curve)
 
 from calibration.metrics import ECE, calibration_curve
 
@@ -39,7 +42,8 @@ def plot_calibration_curve(confs: np.ndarray,
     if plot_samples:
         total_bins = bin_samples.sum()
         for i, bin in enumerate(bin_samples):
-            plt.plot(prob_pred[i], prob_true[i], marker='o', color='#c1272d', markersize=int((bin/total_bins)*100))
+            plt.plot(prob_pred[i], prob_true[i], 
+                     marker='o', color='#c1272d', markersize=int((bin/total_bins)*100))
 
     plt.plot(prob_pred, prob_true,  linestyle='-', marker='o', color='#c1272d')
     plt.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
@@ -127,3 +131,39 @@ def plot_pre_rec_curve(confs: np.ndarray,
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.savefig('precision_recall_curve.png', dpi=300, bbox_inches='tight')
+
+
+def plot_results_above_threshold(confs: np.ndarray,
+                                 labels: np.ndarray) -> None:
+    """
+    Plots the Accuracy, Precision, Recall and F1 Score results
+    by changing the confidence threshold.
+
+    Parameters
+    ----------
+    confs : confidence on the positive class
+
+    labels : true labels as binary targets
+    """
+    metrics = {'Percentage of Samples': '', 'Accuracy': accuracy_score, 
+               'Precision': precision_score, 'Recall': recall_score,
+               'F1 Score': f1_score}
+
+    threshold = np.arange(0.01, 1.00, 0.01)
+
+    for key in metrics.keys():
+        above_threshold = np.zeros(len(threshold))
+
+        for i,thr in enumerate(threshold):
+            preds = (confs > thr).astype(int)
+            if key == 'Percentage of Samples':
+                above_threshold[i] = sum(preds)/len(confs)
+            else:
+                above_threshold[i] = metrics[key](labels, preds)
+
+        nonzero = np.array(above_threshold) != 0
+        plt.figure()
+        plt.plot(threshold[nonzero], above_threshold[nonzero])
+        plt.xlabel('Confidence Threshold')
+        plt.ylabel(key)
+        plt.savefig(f'{key}.png', dpi=300, bbox_inches='tight')
