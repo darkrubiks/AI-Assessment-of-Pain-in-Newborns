@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 import matplotlib
@@ -19,7 +20,8 @@ matplotlib.rcParams['axes.spines.top'] = False
 def plot_calibration_curve(confs: np.ndarray, 
                            labels: np.ndarray, 
                            n_bins: int=10, 
-                           plot_samples: bool=False) -> None:
+                           plot_samples: bool=False,
+                           path: str=os.getcwd()) -> None:
     """
     Plots the calibration curve. It is also possible to include the amount
     of samples in each bin as a circle with dynamic radius.
@@ -34,6 +36,8 @@ def plot_calibration_curve(confs: np.ndarray,
 
     plot_samples : if True it will also plot the amount of samples in each
     bin like a circle where a bigger radius means more samples
+
+    path : where to save the plot image. Defaults to current directory.
     """
     prob_true, prob_pred, bin_samples =  calibration_curve(confs, labels, n_bins)
 
@@ -50,12 +54,15 @@ def plot_calibration_curve(confs: np.ndarray,
     plt.title(f'Calibration Curve - ECE = {ece:.4f}')
     plt.xlabel('Mean Predicted Confidence')
     plt.ylabel('Fraction of Positives')
-    plt.savefig('calibration_curve.png', dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(path,'calibration_curve.png'), 
+                dpi=300, 
+                bbox_inches='tight')
 
 
 def plot_confusion_matrix(preds: np.ndarray, 
                           labels: np. ndarray,
-                          classes: List[str]) -> None:
+                          classes: List[str],
+                          path: str=os.getcwd()) -> None:
     """
     Plots the Confusion Matrix.
 
@@ -67,6 +74,8 @@ def plot_confusion_matrix(preds: np.ndarray,
 
     classes : a list of class names to use. The class names order 
     should exactly match the ordinality of the labels and predictions.
+
+    path : where to save the plot image. Defaults to current directory.
     """
     cm = confusion_matrix(labels, preds)
 
@@ -86,11 +95,14 @@ def plot_confusion_matrix(preds: np.ndarray,
     plt.title('Confusion Matrix')
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
-    plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(path,'confusion_matrix.png'), 
+                dpi=300, 
+                bbox_inches='tight')
 
 
 def plot_roc_curve(confs: np.ndarray, 
-                   labels: np.ndarray) -> None:
+                   labels: np.ndarray,
+                   path: str=os.getcwd()) -> None:
     """
     Plots the Receiver Operating Characteristic curve.
 
@@ -99,6 +111,8 @@ def plot_roc_curve(confs: np.ndarray,
     confs : confidence on the positive class
 
     labels : true labels as binary targets
+
+    path : where to save the plot image. Defaults to current directory.
     """
     fpr, tpr, _ = roc_curve(labels, confs)
 
@@ -108,11 +122,14 @@ def plot_roc_curve(confs: np.ndarray,
     plt.title(f'ROC Curve - AUC = {auc:.4f}')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Postive Rate')
-    plt.savefig('roc_curve.png', dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(path,'roc_curve.png'), 
+                dpi=300, 
+                bbox_inches='tight')
 
 
 def plot_pre_rec_curve(confs: np.ndarray,
-                       labels: np.ndarray) -> None:
+                       labels: np.ndarray,
+                       path: str=os.getcwd()) -> None:
     """
     Plots the Precision-Recall curve.
 
@@ -121,6 +138,8 @@ def plot_pre_rec_curve(confs: np.ndarray,
     confs : confidence on the positive class
 
     labels : true labels as binary targets
+
+    path : where to save the plot image. Defaults to current directory.
     """
     precision, recall, _ = precision_recall_curve(labels, confs)
 
@@ -130,11 +149,14 @@ def plot_pre_rec_curve(confs: np.ndarray,
     plt.title(f'Precision-Recall Curve - AP = {ap:.4f}')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.savefig('precision_recall_curve.png', dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(path,'precision_recall_curve.png'), 
+                dpi=300, 
+                bbox_inches='tight')
 
 
 def plot_results_above_threshold(confs: np.ndarray,
-                                 labels: np.ndarray) -> None:
+                                 labels: np.ndarray,
+                                 path: str=os.getcwd()) -> None:
     """
     Plots the Accuracy, Precision, Recall and F1 Score results
     by changing the confidence threshold.
@@ -144,9 +166,13 @@ def plot_results_above_threshold(confs: np.ndarray,
     confs : confidence on the positive class
 
     labels : true labels as binary targets
+
+    path : where to save the plot image. Defaults to current directory.
     """
-    metrics = {'Percentage of Samples': '', 'Accuracy': accuracy_score, 
-               'Precision': precision_score, 'Recall': recall_score,
+    metrics = {'Percentage of Samples': '', 
+               'Accuracy': accuracy_score, 
+               'Precision': precision_score, 
+               'Recall': recall_score,
                'F1 Score': f1_score}
 
     threshold = np.arange(0.01, 1.00, 0.01)
@@ -166,4 +192,6 @@ def plot_results_above_threshold(confs: np.ndarray,
         plt.plot(threshold[nonzero], above_threshold[nonzero])
         plt.xlabel('Confidence Threshold')
         plt.ylabel(key)
-        plt.savefig(f'{key}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(path,f'{key}.png'), 
+                    dpi=300, 
+                    bbox_inches='tight')
