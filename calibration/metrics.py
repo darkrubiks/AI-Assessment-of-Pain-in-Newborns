@@ -164,7 +164,7 @@ def calibration_curve(confs: np.ndarray,
 
     prob_pred : the mean predicted probability in each bin
 
-    bin_samples : the amount of confidence samples in each bin
+    bin_samples : the amount of samples in each bin
 
     See Also
     --------
