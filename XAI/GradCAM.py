@@ -14,8 +14,8 @@ doi: https://doi.org/10.48550/arXiv.1610.02391
 This code is heavily inspired by https://github.com/jacobgil/pytorch-grad-cam
 """
 import cv2
-import torch
 import numpy as np
+import torch
 
 
 class GradCAM:
@@ -44,7 +44,7 @@ class GradCAM:
     def __init__(self, 
                  model: torch.nn.Module,
                  target_layer: torch.nn.Module,
-                 device: str) -> None:
+                 device: str='cpu') -> None:
         self.device = device
         self.model = model.eval().to(self.device)
         self.target_layer = target_layer

@@ -14,7 +14,6 @@ doi: https://doi.org/10.48550/arXiv.1703.01365
 """
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 
 class IntegratedGradients:
@@ -40,7 +39,7 @@ class IntegratedGradients:
     """
     def __init__(self, 
                  model: torch.nn.Module,
-                 device: str) -> None:
+                 device: str='cpu') -> None:
         self.device = device
         self.model = model.eval().to(self.device)
         
