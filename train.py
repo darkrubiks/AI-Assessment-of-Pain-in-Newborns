@@ -91,7 +91,7 @@ def train(model, dataloader, optimizer, config):
 
         # Only when using soft labels
         if config['soft_label']:
-            _, labels = torch.max(labels, 1)
+            labels = torch.gt(labels, 0.5).type(torch.int)
 
         # Statistics
         preds = torch.gt(F.sigmoid(outputs), 0.5).type(torch.int)
@@ -230,5 +230,10 @@ if __name__=='__main__':
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    if config['soft_label'] and config['label_smoothing'] !=0:
+        print('Please dont use soft labels and label smoothing together!')
+        print('Aborting...')
+        exit(0)
 
     main(config)
