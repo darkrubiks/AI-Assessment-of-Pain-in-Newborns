@@ -18,6 +18,11 @@ class NCNNDataset(BaseDataset):
     
     cache : if True it will cache all images in RAM for faster training
     """
+    transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize((120,120), antialias=False)
+        ])
+
     def __init__(self, 
                 path: str,
                 soft: bool=False,
@@ -25,12 +30,6 @@ class NCNNDataset(BaseDataset):
         
         super().__init__(path, soft, cache)
         
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize((120,120), antialias=False)
-        ])
-
-
     def load_image(self, idx):
         image = cv2.imread(self.img_names[idx])
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Load RGB for NCNN

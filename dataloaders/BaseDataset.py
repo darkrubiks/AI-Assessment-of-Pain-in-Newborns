@@ -42,7 +42,7 @@ class BaseDataset(Dataset):
     
         # Cache images on RAM
         if self.cache:
-            print(f'Caching {self.mode} images and labels please wait....')
+            print(f'Caching images and labels please wait....')
             for i in range(len(self.img_names)):
                 self.images_cached.append(self.load_image(i))
                 self.labels_cached.append(self.load_label(i))
