@@ -30,7 +30,7 @@ class BaseDataset(Dataset):
         self.images_cached = []
         self.labels_cached = []
         
-        # Make sure to have this file on your main directory
+        # Make sure to have this file in your main directory
         self.dataframe = pd.read_csv('iCOPE+UNIFESP_data.csv',
                                      usecols=['new_file_name','NFCS', 'class'])
 
