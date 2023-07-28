@@ -27,16 +27,12 @@ from validate import validation_metrics
 def load_dataset(config):
     # Load the Dataset
     train_dataset = getattr(dataloaders, config['model']+'Dataset') \
-                           (img_dir=os.path.join('Datasets','Folds'),
-                            fold=config['fold'],
-                            mode='Train',
+                           (path=config['path_train'],
                             soft=config['soft_label'],
                             cache=config['cache'])
 
     test_dataset = getattr(dataloaders, config['model']+'Dataset') \
-                          (img_dir=os.path.join('Datasets','Folds'),
-                           fold=config['fold'],
-                           mode='Test',
+                          (path=config['path_test'],
                            cache=config['cache'])
     
     # Batch and Shuffle the Dataset
@@ -53,6 +49,7 @@ def load_dataset(config):
                                  pin_memory=config['pin_memory'])
 
     return train_dataloader, test_dataloader
+
 
 def train(model, dataloader, criterion, optimizer, config):
     # Train for one epoch
@@ -95,6 +92,7 @@ def train(model, dataloader, criterion, optimizer, config):
 
     return metrics
 
+
 def test(model, dataloader, criterion, config):
     # Test for one epoch
     model.eval()
@@ -126,6 +124,7 @@ def test(model, dataloader, criterion, config):
             dataloader.set_postfix(metrics)
 
     return metrics
+
 
 def main(config):
     # Define file_name to save epochs results
@@ -206,6 +205,7 @@ def main(config):
 
     time_elapsed = time.time() - since
     print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
+
 
 if __name__=='__main__':
 

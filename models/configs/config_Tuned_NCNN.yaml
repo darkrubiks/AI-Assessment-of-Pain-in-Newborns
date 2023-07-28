@@ -3,7 +3,8 @@
 # Model to be trained
 model: NCNN
 # Dataset path
-fold: '0'
+path_train: 'Datasets\Folds\0\Train'
+path_test: 'Datasets\Folds\0\Test'
 # Device configuration
 device: 'cuda'
 cache: False
