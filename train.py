@@ -25,7 +25,7 @@ from utils.utils import load_config, write_to_csv
 from validate import validation_metrics
 
 
-def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0):
+def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0.0):
     # Custom binary cross-entropy loss with label smoothing.
     epsilon = 1.0 if epsilon > 1.0 else epsilon
     smoothed_labels = (1 - epsilon) * labels + epsilon / 2
