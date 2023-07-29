@@ -50,6 +50,8 @@ class VGGNB(nn.Module):
 
     def forward(self, x):
         x = self.VGGFace(x)
+        x = x.view(-1)
+        
         return x
     
     def predict(self, x):
