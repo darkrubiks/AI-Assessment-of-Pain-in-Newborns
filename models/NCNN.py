@@ -115,6 +115,8 @@ class NCNN(nn.Module):
         x_right = self.right_branch(x)
 
         x = self.merge_branch(x_left, x_center, x_right)
+
+        x = x.view(-1)
         
         return x
     

@@ -29,7 +29,6 @@ def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0):
     # Custom binary cross-entropy loss with label smoothing.
     epsilon = 1.0 if epsilon > 1.0 else epsilon
     smoothed_labels = (1 - epsilon) * labels + epsilon / 2
-    outputs = outputs.view(-1)
     loss = nn.BCEWithLogitsLoss()(outputs, smoothed_labels)
 
     return loss
