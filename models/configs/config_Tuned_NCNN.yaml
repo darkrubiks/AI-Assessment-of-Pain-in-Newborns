@@ -8,8 +8,8 @@ path_test: 'Datasets\Folds\0\Test'
 # Device configuration
 device: 'cuda'
 cache: False
-pin_memory: False
-num_workers: 0
+pin_memory: True
+num_workers: 4
 # Training Hyperparameters
 epochs: 120
 patience: 43

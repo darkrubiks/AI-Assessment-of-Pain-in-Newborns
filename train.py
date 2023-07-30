@@ -56,9 +56,9 @@ def train(model, dataloader, criterion, optimizer, config):
     model.train()
 
     running_loss = 0.0
-    preds_list = []
-    labels_list = []
-
+    preds_list = torch.empty(0, device=config['device'])
+    labels_list = torch.empty(0, device=config['device'])
+ 
     for i,batch in enumerate(dataloader, start=1):
         inputs = batch['image'].to(config['device'])
         labels = batch['label'].to(config['device'])
@@ -81,14 +81,15 @@ def train(model, dataloader, criterion, optimizer, config):
 
         # Statistics
         running_loss += loss.item()
-        preds_list += preds.cpu().numpy().tolist()
-        labels_list += labels.cpu().numpy().tolist()
+        preds_list = torch.cat([preds_list, preds])
+        labels_list = torch.cat([labels_list, labels])
 
-        metrics = validation_metrics(labels_list, preds_list)
-        metrics.update({'Loss': running_loss/i})
-
-        # Update progress bar
-        dataloader.set_postfix(metrics)
+        # Only update after 20 batches
+        if i % 20 == 0:
+            metrics = validation_metrics(labels_list.cpu().numpy(), preds_list.cpu().numpy())
+            metrics.update({'Loss': running_loss/i})
+            # Update progress bar
+            dataloader.set_postfix(metrics)
 
     return metrics
 
@@ -98,8 +99,8 @@ def test(model, dataloader, criterion, config):
     model.eval()
 
     running_loss = 0.0
-    preds_list = []
-    labels_list = []
+    preds_list = torch.empty(0, device=config['device'])
+    labels_list = torch.empty(0, device=config['device'])
 
     # Disable gradient computation and reduce memory consumption
     with torch.no_grad():
@@ -114,10 +115,10 @@ def test(model, dataloader, criterion, config):
 
             # Statistics
             running_loss += loss.item()
-            preds_list += preds.cpu().numpy().tolist()
-            labels_list += labels.cpu().numpy().tolist()
+            preds_list = torch.cat([preds_list, preds])
+            labels_list = torch.cat([labels_list, labels])
 
-            metrics = validation_metrics(labels_list, preds_list)
+            metrics = validation_metrics(labels_list.cpu().numpy(), preds_list.cpu().numpy())
             metrics.update({'Loss': running_loss/i})
 
             # Update progress bar
@@ -173,7 +174,7 @@ def main(config):
 
         # TQDM progress bar
         test_dataloader = tqdm(test_dataloader, unit=' batch', colour='#00ff00', smoothing=0)
-        test_dataloader.set_description(f"Test - Epoch [{epoch}/{config['epochs']}]")
+        test_dataloader.set_description(f"Test  - Epoch [{epoch}/{config['epochs']}]")
         
         # Test function
         test_metrics = test(model, test_dataloader, criterion, config)
