@@ -7,10 +7,30 @@ Date: 06/05/2023
 This file contains metrics that can be used to validate the model's calibration.
 """
 import numpy as np
-from sklearn.metrics import log_loss, brier_score_loss
+from sklearn.metrics import brier_score_loss, log_loss
 
 
-def ECE(confs: np.ndarray,
+def _bin_data(probs: np.ndarray,
+              labels: np.ndarray,
+              n_bins: int=10) -> np.ndarray:
+    """
+    Bins the probabilities and labels.
+    """
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    binids = np.searchsorted(bins[1:-1], probs)
+
+    bin_sums = np.bincount(binids, weights=probs, minlength=len(bins))
+    bin_true = np.bincount(binids, weights=labels, minlength=len(bins))
+    bin_total = np.bincount(binids, minlength=len(bins))
+
+    nonzero = bin_total != 0
+    prob_true = bin_true[nonzero] / bin_total[nonzero]
+    prob_pred = bin_sums[nonzero] / bin_total[nonzero]
+
+    return  prob_true, prob_pred, bin_total[nonzero]
+
+
+def ECE(probs: np.ndarray,
         labels: np.ndarray,
         n_bins: int=10) -> np.float32:
     """
@@ -18,7 +38,7 @@ def ECE(confs: np.ndarray,
 
     Parameters
     ----------
-    probs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -36,23 +56,15 @@ def ECE(confs: np.ndarray,
 
     doi : https://doi.org/10.1609/aaai.v29i1.9602
     """
-    bin_boundaries = np.linspace(0, 1, n_bins + 1)
-    bin_lowers = bin_boundaries[:-1]
-    bin_uppers = bin_boundaries[1:]
+    prob_true, prob_pred, bin_total = _bin_data(probs, labels, n_bins)
 
-    ece = 0
-    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
-        # Calculate |fraction of positives - confidence| in each bin
-        in_bin = np.greater(confs, bin_lower) * np.less(confs, bin_upper)
-        prop_in_bin = in_bin.mean()
-        if prop_in_bin > 0:
-            fraction_of_postives_in_bin = labels[in_bin].mean()
-            avg_confidence_in_bin = confs[in_bin].mean()
-            ece += np.abs(fraction_of_postives_in_bin - avg_confidence_in_bin) * prop_in_bin
+    P =  bin_total/np.sum(bin_total)
+    ece = np.sum(np.abs(prob_true - prob_pred) * P)
 
     return ece
 
-def MCE(confs: np.ndarray,
+
+def MCE(probs: np.ndarray,
         labels: np.ndarray,
         n_bins: int=10) -> np.float32:
     """
@@ -60,7 +72,7 @@ def MCE(confs: np.ndarray,
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -78,30 +90,21 @@ def MCE(confs: np.ndarray,
 
     doi: https://doi.org/10.1609/aaai.v29i1.9602
     """
-    bin_boundaries = np.linspace(0, 1, n_bins + 1)
-    bin_lowers = bin_boundaries[:-1]
-    bin_uppers = bin_boundaries[1:]
+    prob_true, prob_pred, _ = _bin_data(probs, labels, n_bins)
 
-    mce = []
-    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
-        # Calculate |fraction of positives - confidence| in each bin
-        in_bin = np.greater(confs, bin_lower) * np.less(confs, bin_upper)
-        prop_in_bin = in_bin.mean()
-        if prop_in_bin > 0:
-            fraction_of_postives_in_bin = labels[in_bin].mean()
-            avg_confidence_in_bin = confs[in_bin].mean()
-            mce.append(np.abs(avg_confidence_in_bin - fraction_of_postives_in_bin))
+    mce = np.max(np.abs(prob_true - prob_pred))
 
-    return max(mce)
+    return mce
 
-def negative_log_likelihood(confs: np.ndarray,
+
+def negative_log_likelihood(probs: np.ndarray,
                             labels: np.ndarray) -> np.float32:
     """
     Calculates the Negative Log Likelihood.
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -113,18 +116,19 @@ def negative_log_likelihood(confs: np.ndarray,
     --------
     scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.metrics.log_loss.html
     """
-    nll = log_loss(labels, confs)
+    nll = log_loss(labels, probs)
 
     return nll
 
-def brier_score(confs: np.ndarray, 
+
+def brier_score(probs: np.ndarray, 
                 labels: np.ndarray) -> np.float32:
     """
     Calculates the Brier Score.
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -136,11 +140,12 @@ def brier_score(confs: np.ndarray,
     --------
     scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html
     """
-    brier = brier_score_loss(labels, confs)
+    brier = brier_score_loss(labels, probs)
 
     return brier
 
-def calibration_curve(confs: np.ndarray,
+
+def calibration_curve(probs: np.ndarray,
                       labels: np.ndarray,
                       n_bins: int=10) -> np.ndarray:
     """
@@ -151,7 +156,7 @@ def calibration_curve(confs: np.ndarray,
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -164,22 +169,12 @@ def calibration_curve(confs: np.ndarray,
 
     prob_pred : the mean predicted probability in each bin
 
-    bin_samples : the amount of samples in each bin
+    bin_total : the amount of samples in each bin
 
     See Also
     --------
     scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.calibration.calibration_curve.html
     """
-    bins = np.linspace(0.0, 1.0, n_bins + 1)
-    binids = np.searchsorted(bins[1:-1], confs)
-    bin_samples = np.bincount(binids)
-
-    bin_sums = np.bincount(binids, weights=confs, minlength=len(bins))
-    bin_true = np.bincount(binids, weights=labels, minlength=len(bins))
-    bin_total = np.bincount(binids, minlength=len(bins))
-
-    nonzero = bin_total != 0
-    prob_true = bin_true[nonzero] / bin_total[nonzero]
-    prob_pred = bin_sums[nonzero] / bin_total[nonzero]
+    prob_true, prob_pred, bin_total = _bin_data(probs, labels, n_bins)
     
-    return prob_true, prob_pred, bin_samples
+    return prob_true, prob_pred, bin_total
