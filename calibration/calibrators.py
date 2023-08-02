@@ -7,121 +7,219 @@ Date: 08/05/2023
 This file contains calibrators for classification models.
 """
 import numpy as np
+from scipy.optimize import minimize
 from sklearn.isotonic import IsotonicRegression
 
+from calibration.metrics import negative_log_likelihood
 
-def softmax(logits: np.ndarray) -> np.ndarray:
+
+def softmax(logit: np.ndarray) -> np.ndarray:
     """
-    Returns the logits of a neural network as softmaxes probabilities.
+    Returns the logit of a neural network as softmaxes probabilities.
+    Prefer this when assessing multiclass problems.
 
     Parameters
     ----------
-    logits : the output of the model in logit form (NOT the softmax), from both 
-    classes
+    logit : the output of the model in logit form
 
     Returns
     -------
     the softmax scores ranging from [0-1]
     """
-    e_x = np.exp(logits - np.max(logits))
+    e_x = np.exp(logit - np.max(logit))
     return e_x / e_x.sum(axis=1, keepdims=1)
 
-class TemperatureScaling:
+
+def sigmoid(logit: np.ndarray) -> np.ndarray:
     """
-    Scales the neural network logits with a value 1 / T (temperature), and returns
-    the calibrated predictions.
+    Returns the logit of a neural network as a sigmoid probability.
+    Prefer this when assessing binary problems.
 
     Parameters
     ----------
-    temperature : the temperature value T to scale the logits, must be > 1
+    logit : the output of the model in logit form
+
+    Returns
+    -------
+    the sigmoid probability ranging from [0-1]
+    """
+    return 1 / (1 + np.exp(-logit))
+
+
+class TemperatureScaling:
+    """
+    Scales the neural network logit with a value 1 / T (temperature), and returns
+    the calibrated predictions. For now it only supports binary classification.
+
+    Parameters
+    ----------
+    temperature : the temperature value T to scale the logit, must be > 1
 
     See Also
     -------
-    Guo, Chuan, et al. "On calibration of modern neural networks." 
+    Guo, Chuan, et al. "On calibration of modern neural networks."
     International conference on machine learning. PMLR, 2017.
 
     doi : https://doi.org/10.48550/arXiv.1706.04599
     """
-    def __init__(self, 
-                 temperature: float=1.0) -> None:
-        self.temperature = temperature
 
-    def predict(self, 
-                logits: np.ndarray) -> np.ndarray:
+    def __init__(self) -> None:
+        self.T = None
+
+    def fit(self, logit: np.ndarray, labels: np.ndarray) -> None:
+        """
+        Minimizes the Negative Log Likelihood of the labels and logit
+        to find the best temperature value.
+
+        Parameters
+        ----------
+        logit : the output of the model in logit form
+
+        labels : the true labels as binary targets
+        """
+
+        def _objective(T):
+            return negative_log_likelihood(sigmoid(logit / T), labels)
+
+        result = minimize(_objective, x0=3.0, method="L-BFGS-B", bounds=[(1.0, None)], tol=1e-7)
+
+        if result.success:
+            self.T = result.x
+        else:
+            print("Minimization did not converge!")
+
+    def predict(self, logit: np.ndarray) -> np.ndarray:
         """
         Returns the calibrated probabilities.
 
         Parameters
         ----------
-        logits : the output of the model in logit form (NOT the softmax), from 
-        both classes
+        logit : the output of the model in logit form
 
         Returns
         -------
         the calibrated probabilities ranging from [0-1]
         """
-        calibrated_probs = softmax(logits / self.temperature)
-        return calibrated_probs
-    
-class Isotonic:
-    """
-    Fits a Isotonic Regressor to the probabilities and original labels, returns 
-    the calibrated probabilities. This implementation only works for 2 classes,
-    it is preferred to use the "True/Positive" class.
+        calibrated_probs = sigmoid(logit / self.T)
 
-    Parameters
-    ----------
-    class_idx : "True/Positive" class index
+        return calibrated_probs
+
+
+class IsotonicRegressor:
+    """
+    Fits a Isotonic Regressor to the probabilities and original labels, returns
+    the calibrated probabilities. For this implementation it is preferred to use
+    the "True/Positive" class.
 
     See Also
     --------
-    Zadrozny, Bianca, and Charles Elkan. "Transforming classifier scores into 
-    accurate multiclass probability estimates." Proceedings of the eighth ACM 
+    Zadrozny, Bianca, and Charles Elkan. "Transforming classifier scores into
+    accurate multiclass probability estimates." Proceedings of the eighth ACM
     SIGKDD international conference on Knowledge discovery and data mining. 2002.
 
     doi : https://doi.org/10.1145/775047.775151
     """
-    def __init__(self, class_idx: int=1) -> None:
-        self.calibrator = IsotonicRegression(out_of_bounds='clip')
-        self.class_idx = class_idx
-        
-    def fit(self, 
-            logits: np.ndarray, 
-            labels: np.ndarray) -> None:
+
+    def __init__(self) -> None:
+        self.calibrator = IsotonicRegression(out_of_bounds="clip")
+        self.function = None
+
+    def fit(self, probs: np.ndarray, labels: np.ndarray) -> None:
         """
-        Fits the Isotonic Regressor using the available data. It automatically
-        splits into train and test sets so the Regressor won't overfit.
+        Fits the Isotonic Regressor using the available data.
 
         Parameters
         ----------
-        logits : the output of the model in logit form (NOT the softmax), from 
-        both classes
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
 
-        labels : the true labels as binary targetes
+        labels : the true labels as binary targets
         """
-        # Choose 70% of the data so the Regressor is not overfitted
-        random_idx = np.random.randint(0, len(logits), int(0.7*len(logits)))
-        probs = softmax(logits[random_idx])[:, self.class_idx]
-        labels = labels[random_idx]
-        self.calibrator.fit(probs, labels)
+        self.calibrator.fit(probs.reshape(-1, 1), labels)
+        self.function = self.calibrator.f_
 
-    def predict(self, 
-                logits: np.ndarray) -> np.ndarray:
+    def predict(self, probs: np.ndarray) -> np.ndarray:
         """
         Returns the calibrated probabilities.
 
         Parameters
         ----------
-        logits : the output of the model in logit form (NOT the softmax), from 
-        both classes
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
 
         Returns
         -------
         the calibrated probabilities ranging from [0-1]
         """
-        probs = softmax(logits)[:, self.class_idx]
-        pred_probs = self.calibrator.predict(probs)
-        calibrated_probs = np.zeros((len(probs), 2))
-        calibrated_probs[:, 0] = 1 - pred_probs
-        calibrated_probs[:, 1] = pred_probs
+        calibrated_probs = self.calibrator.predict(probs)
+
+        return calibrated_probs
+
+
+class PlattScaling:
+    """
+    Implementation of the Platt Scalling method for calibrating probabilities.
+    For this implementation it is preferred to use the "True/Positive" class.
+
+    See Also
+    --------
+    Platt, John. "Probabilistic outputs for support vector machines and comparisons
+    to regularized likelihood methods." Advances in large margin classifiers. 1999.
+    """
+
+    def __init__(self) -> None:
+        self.A = None
+        self.B = None
+
+    def fit(self, probs: np.ndarray, labels: np.ndarray) -> None:
+        """
+        Minimizes the Negative Log Likelihood to find the parameters A and B
+        of a sigmoid that best calibrates the probabilities.
+
+        Parameters
+        ----------
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
+
+        labels : the true labels as binary targets
+        """
+        # Calculate priors according to Platt 1999.
+        mask_negative_samples = labels <= 0
+        N_minus = float(np.sum(mask_negative_samples))
+        N_plus = labels.shape[0] - N_minus
+
+        # The priors are used to make a soft label and helps prevent overfitting
+        T = np.zeros_like(labels, dtype=np.float64)
+        T[labels > 0] = (N_plus + 1.0) / (N_plus + 2.0)
+        T[labels <= 0] = 1.0 / (N_minus + 2.0)
+
+        def _objective(AB):
+            P = 1 / (1 + np.exp(-(AB[0] * probs + AB[1])))
+            return negative_log_likelihood(P, T)
+
+        AB0 = np.array([0.0, np.log((N_minus + 1.0) / (N_plus + 1.0))])
+        result = minimize(_objective, x0=AB0, method="L-BFGS-B", tol=1e-7)
+
+        if result.success:
+            self.A = result.x[0]
+            self.B = result.x[1]
+        else:
+            print("Minimization did not converge!")
+
+    def predict(self, probs: np.ndarray) -> np.ndarray:
+        """
+        Returns the calibrated probabilities.
+
+        Parameters
+        ----------
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
+
+        Returns
+        -------
+        the calibrated probabilities ranging from [0-1]
+        """
+        calibrated_probs = probs * self.A + self.B
+        calibrated_probs = sigmoid(calibrated_probs)
+
         return calibrated_probs
