@@ -7,12 +7,13 @@ Date: 06/05/2023
 This file contains metrics that can be used to validate the model's calibration.
 """
 import numpy as np
-from sklearn.metrics import brier_score_loss, log_loss
+from sklearn.metrics import brier_score_loss
+from typing import Tuple
 
 
 def _bin_data(probs: np.ndarray,
               labels: np.ndarray,
-              n_bins: int=10) -> np.ndarray:
+              n_bins: int=10) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Bins the probabilities and labels.
     """
@@ -27,7 +28,7 @@ def _bin_data(probs: np.ndarray,
     prob_true = bin_true[nonzero] / bin_total[nonzero]
     prob_pred = bin_sums[nonzero] / bin_total[nonzero]
 
-    return  prob_true, prob_pred, bin_total[nonzero]
+    return  (prob_true, prob_pred, bin_total[nonzero])
 
 
 def ECE(probs: np.ndarray,
@@ -100,7 +101,7 @@ def MCE(probs: np.ndarray,
 def negative_log_likelihood(probs: np.ndarray,
                             labels: np.ndarray) -> np.float32:
     """
-    Calculates the Negative Log Likelihood.
+    Calculates the Negative Log Likelihood for a binary problem.
 
     Parameters
     ----------
@@ -111,14 +112,10 @@ def negative_log_likelihood(probs: np.ndarray,
     Returns
     -------
     nll : the Negative Log Likelihood
-
-    See Also
-    --------
-    scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.metrics.log_loss.html
     """
-    nll = log_loss(labels, probs)
+    nll = -(labels * np.log(probs) + (1 - labels) * np.log(1 - probs))
 
-    return nll
+    return nll.mean()
 
 
 def brier_score(probs: np.ndarray, 
@@ -147,7 +144,7 @@ def brier_score(probs: np.ndarray,
 
 def calibration_curve(probs: np.ndarray,
                       labels: np.ndarray,
-                      n_bins: int=10) -> np.ndarray:
+                      n_bins: int=10) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute true and predicted probabilities for a calibration curve.
 
