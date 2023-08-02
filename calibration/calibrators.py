@@ -81,7 +81,7 @@ class TemperatureScaling:
         def _objective(T):
             return negative_log_likelihood(sigmoid(logit / T), labels)
 
-        result = minimize(_objective, x0=1.0, method="L-BFGS-B", bounds=[(1.0, None)])
+        result = minimize(_objective, x0=3.0, method="L-BFGS-B", bounds=[(1.0, None)], tol=1e-7)
 
         if result.success:
             self.T = result.x
@@ -198,7 +198,7 @@ class PlattScaling:
             return negative_log_likelihood(P, T)
 
         AB0 = np.array([0.0, np.log((N_minus + 1.0) / (N_plus + 1.0))])
-        result = minimize(_objective, x0=AB0, method="L-BFGS-B")
+        result = minimize(_objective, x0=AB0, method="L-BFGS-B", tol=1e-7)
 
         if result.success:
             self.A = result.x[0]
