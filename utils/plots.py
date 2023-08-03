@@ -60,6 +60,7 @@ def plot_calibration_curve(confs: np.ndarray,
     plt.savefig(os.path.join(path,'calibration_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
 def plot_confusion_matrix(preds: np.ndarray, 
@@ -101,6 +102,7 @@ def plot_confusion_matrix(preds: np.ndarray,
     plt.savefig(os.path.join(path,'confusion_matrix.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
 def plot_roc_curve(confs: np.ndarray, 
@@ -129,6 +131,7 @@ def plot_roc_curve(confs: np.ndarray,
     plt.savefig(os.path.join(path,'roc_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
 def plot_pre_rec_curve(confs: np.ndarray,
@@ -157,6 +160,7 @@ def plot_pre_rec_curve(confs: np.ndarray,
     plt.savefig(os.path.join(path,'precision_recall_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
 def plot_results_above_threshold(confs: np.ndarray,
@@ -200,3 +204,4 @@ def plot_results_above_threshold(confs: np.ndarray,
         plt.savefig(os.path.join(path,f'{key}.png'), 
                     dpi=300, 
                     bbox_inches='tight')
+        plt.close()
