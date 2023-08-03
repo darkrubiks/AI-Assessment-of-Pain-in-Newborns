@@ -63,7 +63,7 @@ class BaseDataset(Dataset):
             # Transform the NFCS into a soft label using the sigmoid function
             NFCS = dataframe_result['NFCS'].values[0]
             S_x = 1 / (1 + np.exp(-NFCS + 2.5))
-            label = torch.Tensor([1 - S_x, S_x])
+            label = torch.tensor(S_x)
         else:
             # Label encoding
             label = 1 if classe == 'pain' else 0
