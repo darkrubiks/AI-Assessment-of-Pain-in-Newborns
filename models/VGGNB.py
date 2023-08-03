@@ -45,12 +45,14 @@ class VGGNB(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(in_features=512,
-                      out_features=2)
+                      out_features=1)
         )
 
     def forward(self, x):
         x = self.VGGFace(x)
+        x = x.view(-1)
+        
         return x
     
     def predict(self, x):
-        return F.softmax(self.forward(x), dim=1)
+        return F.sigmoid(self.forward(x))

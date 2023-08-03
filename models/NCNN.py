@@ -75,7 +75,7 @@ class NCNN(nn.Module):
         self.dropout_4 = nn.Dropout(0.1)
 
         self.output = nn.Linear(in_features=8, 
-                                out_features=2)
+                                out_features=1)
 
     def left_branch(self, x):
         x = self.maxpool_1_1(x)
@@ -115,8 +115,10 @@ class NCNN(nn.Module):
         x_right = self.right_branch(x)
 
         x = self.merge_branch(x_left, x_center, x_right)
+
+        x = x.view(-1)
         
         return x
     
     def predict(self, x):
-        return F.softmax(self.forward(x), dim=1)
+        return F.sigmoid(self.forward(x))

@@ -70,8 +70,7 @@ class GradCAM:
         output.register_hook(__store_grad)
 
     def attribution_mask(self, 
-                         image: torch.Tensor, 
-                         target_class: int) -> np.ndarray:
+                         image: torch.Tensor) -> np.ndarray:
         """
         Generates the GradCAM attribution mask.
         """
@@ -80,7 +79,7 @@ class GradCAM:
             image = image.unsqueeze(0)
 
         image = image.to(self.device).requires_grad_()
-        logit = self.model(image)[:, target_class]
+        logit = self.model(image)
     
         self.model.zero_grad()
 
