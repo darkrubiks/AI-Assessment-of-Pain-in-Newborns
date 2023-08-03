@@ -23,7 +23,7 @@ from tqdm import tqdm
 import dataloaders
 import models
 from utils.utils import load_config, write_to_csv
-from validate import validation_metrics
+from validate import validation_metrics, validation_plots
 
 # Get current directory
 ROOT = os.getcwd()
@@ -101,7 +101,7 @@ def train(model, dataloader, optimizer, config):
 
         # Only update after 20 batches
         if i % 20 == 0:
-            metrics = validation_metrics(labels_list.cpu().numpy(), preds_list.cpu().numpy())
+            metrics = validation_metrics(preds_list.cpu().numpy(), labels_list.cpu().numpy())
             metrics.update({'Loss': running_loss/i})
             # Update progress bar
             dataloader.set_postfix(metrics)
@@ -133,7 +133,7 @@ def test(model, dataloader, config):
             preds_list = torch.cat([preds_list, preds])
             labels_list = torch.cat([labels_list, labels])
 
-            metrics = validation_metrics(labels_list.cpu().numpy(), preds_list.cpu().numpy())
+            metrics = validation_metrics(preds_list.cpu().numpy(), labels_list.cpu().numpy())
             metrics.update({'Loss': running_loss/i})
 
             # Update progress bar
@@ -221,12 +221,40 @@ def main(config):
 
         # Check if the stopping criterion is met
         if counter >= config['patience']:
-            print(f'Early stopping at epoch {epoch}')
+            print(f'Early stopping at epoch {epoch}\n')
             break
 
     time_elapsed = time.time() - since
-    print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
+    print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n')
+    
+    # Run validation plots on the best model
+    print(f"Saving Results to {os.path.join(experiment_dir, 'Results')}\n")
+    model.eval()
+    model.load_state_dict(torch.load(model_file))
 
+    preds_list = torch.empty(0, device=config['device'])
+    labels_list = torch.empty(0, device=config['device'])
+    probs_list = torch.empty(0, device=config['device'])
+
+    with torch.no_grad():
+        for batch in test_dataloader:
+            inputs = batch['image'].to(config['device'])
+            labels = batch['label'].to(config['device'])
+
+            # Calculate loss
+            outputs = model(inputs)
+            # Statistics
+            probs = F.sigmoid(outputs)
+            preds = torch.gt(probs, 0.5).type(torch.int)
+            
+            preds_list = torch.cat([preds_list, preds])
+            labels_list = torch.cat([labels_list, labels])
+            probs_list = torch.cat([probs_list, probs])
+
+    validation_plots(preds_list.cpu().numpy(), 
+                     probs_list.cpu().numpy(), 
+                     labels_list.cpu().numpy(), 
+                     path=os.path.join(experiment_dir, 'Results'))
 
 if __name__=='__main__':
 
@@ -247,6 +275,11 @@ if __name__=='__main__':
 
     if config['soft_label'] and config['label_smoothing'] !=0:
         print('Please dont use soft labels and label smoothing together!')
+        print('Aborting...')
+        exit(0)
+
+    if config['cache'] and config['num_workers'] > 0:
+        print('Number of workers should be zero to use cache!')
         print('Aborting...')
         exit(0)
 
