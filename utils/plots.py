@@ -19,7 +19,7 @@ matplotlib.rcParams['axes.spines.top'] = False
 COLOR = '#303eba'
 
 
-def plot_calibration_curve(confs: np.ndarray, 
+def plot_calibration_curve(probs: np.ndarray, 
                            labels: np.ndarray, 
                            n_bins: int=10, 
                            plot_samples: bool=False,
@@ -30,7 +30,7 @@ def plot_calibration_curve(confs: np.ndarray,
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -41,9 +41,9 @@ def plot_calibration_curve(confs: np.ndarray,
 
     path : where to save the plot image. Defaults to current directory.
     """
-    prob_true, prob_pred, bin_samples =  calibration_curve(confs, labels, n_bins)
+    prob_true, prob_pred, bin_samples =  calibration_curve(probs, labels, n_bins)
 
-    ece = ECE(confs, labels, n_bins)
+    ece = ECE(probs, labels, n_bins)
 
     if plot_samples:
         total_bins = bin_samples.sum()
@@ -60,6 +60,7 @@ def plot_calibration_curve(confs: np.ndarray,
     plt.savefig(os.path.join(path,'calibration_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
 def plot_confusion_matrix(preds: np.ndarray, 
@@ -101,9 +102,10 @@ def plot_confusion_matrix(preds: np.ndarray,
     plt.savefig(os.path.join(path,'confusion_matrix.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
-def plot_roc_curve(confs: np.ndarray, 
+def plot_roc_curve(probs: np.ndarray, 
                    labels: np.ndarray,
                    path: str=os.getcwd()) -> None:
     """
@@ -111,15 +113,15 @@ def plot_roc_curve(confs: np.ndarray,
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
     path : where to save the plot image. Defaults to current directory.
     """
-    fpr, tpr, _ = roc_curve(labels, confs)
+    fpr, tpr, _ = roc_curve(labels, probs)
 
-    auc = roc_auc_score(labels, confs)
+    auc = roc_auc_score(labels, probs)
 
     plt.plot(fpr, tpr, color=COLOR, label=f'AUC = {auc:.4f}')
     plt.title(f'ROC Curve')
@@ -129,9 +131,10 @@ def plot_roc_curve(confs: np.ndarray,
     plt.savefig(os.path.join(path,'roc_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
-def plot_pre_rec_curve(confs: np.ndarray,
+def plot_pre_rec_curve(probs: np.ndarray,
                        labels: np.ndarray,
                        path: str=os.getcwd()) -> None:
     """
@@ -139,15 +142,15 @@ def plot_pre_rec_curve(confs: np.ndarray,
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
     path : where to save the plot image. Defaults to current directory.
     """
-    precision, recall, _ = precision_recall_curve(labels, confs)
+    precision, recall, _ = precision_recall_curve(labels, probs)
 
-    ap = average_precision_score(labels, confs)
+    ap = average_precision_score(labels, probs)
     
     plt.plot(recall, precision, color=COLOR, label=f'AP = {ap:.4f}')
     plt.title(f'Precision-Recall Curve ')
@@ -157,9 +160,10 @@ def plot_pre_rec_curve(confs: np.ndarray,
     plt.savefig(os.path.join(path,'precision_recall_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
+    plt.close()
 
 
-def plot_results_above_threshold(confs: np.ndarray,
+def plot_results_above_threshold(probs: np.ndarray,
                                  labels: np.ndarray,
                                  path: str=os.getcwd()) -> None:
     """
@@ -168,7 +172,7 @@ def plot_results_above_threshold(confs: np.ndarray,
 
     Parameters
     ----------
-    confs : confidence on the positive class
+    probs : probability of the positive class
 
     labels : true labels as binary targets
 
@@ -186,11 +190,13 @@ def plot_results_above_threshold(confs: np.ndarray,
         above_threshold = np.zeros(len(threshold))
 
         for i,thr in enumerate(threshold):
-            preds = (confs > thr).astype(int)
+            preds = (probs > thr).astype(int)
             if key == 'Percentage of Samples':
-                above_threshold[i] = sum(preds)/len(confs)
-            else:
+                above_threshold[i] = sum(preds)/len(probs)
+            elif key == 'Accuracy':
                 above_threshold[i] = metrics[key](labels, preds)
+            else:
+                above_threshold[i] = metrics[key](labels, preds, zero_division=0)
 
         nonzero = np.array(above_threshold) != 0
         plt.figure()
@@ -200,3 +206,4 @@ def plot_results_above_threshold(confs: np.ndarray,
         plt.savefig(os.path.join(path,f'{key}.png'), 
                     dpi=300, 
                     bbox_inches='tight')
+        plt.close()
