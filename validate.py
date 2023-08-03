@@ -8,6 +8,7 @@ Code for validating Deep Learning models.
 """
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from utils.plots import *
 
 
 def validation_metrics(preds: np.ndarray,
@@ -18,9 +19,9 @@ def validation_metrics(preds: np.ndarray,
 
     Parameters
     ----------
-    labels : the original labels for each sample
-
     preds : the predicted class for each sample
+
+    labels : the original labels for each sample
 
     Returns
     -------
@@ -34,3 +35,25 @@ def validation_metrics(preds: np.ndarray,
     metrics = {'Accuracy': acc, 'F1 Score': f1, 'Precision': precision, 'Recall': recall}
 
     return metrics
+
+
+def validation_plots(preds: np.ndarray,
+                     probs: np.ndarray,
+                     labels: np.ndarray,
+                     path: str=os.getcwd()) -> None:
+    """
+    Creates all the available plots for validation.
+
+    Parameters
+    ----------
+    preds : the predicted class for each sample
+
+    probs : probability of the positive class
+
+    labels : the original labels for each sample
+    """
+    plot_calibration_curve(probs, labels, plot_samples=True, path=path)
+    plot_confusion_matrix(preds, labels, ['No Pain', 'Pain'], path)
+    plot_roc_curve(probs, labels, path)
+    plot_pre_rec_curve(probs, labels, path)
+    plot_results_above_threshold(probs, labels, path)
