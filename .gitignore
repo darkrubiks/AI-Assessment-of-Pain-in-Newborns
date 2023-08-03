@@ -4,6 +4,7 @@ __pycache__
 # ignore datasets folder and images folder
 Datasets/
 images/
+experiments/
 
 # ignore large models files
 models/*.pt

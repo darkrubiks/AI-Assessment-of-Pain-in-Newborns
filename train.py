@@ -8,6 +8,7 @@ Code for training Deep Learning models.
 """
 import argparse
 import os
+import shutil
 import time
 from datetime import datetime
 
@@ -24,6 +25,10 @@ import models
 from utils.utils import load_config, write_to_csv
 from validate import validation_metrics
 
+# Get current directory
+ROOT = os.getcwd()
+SAVE_DIR = os.path.join(ROOT, 'experiments')
+    
 
 def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0.0):
     # Custom binary cross-entropy loss with label smoothing.
@@ -138,18 +143,25 @@ def test(model, dataloader, config):
 
 
 def main(config):
-    # Define file_name to save epochs results
+    # Define experiment name to save results
     now = datetime.now()
     timestamp = now.strftime('%Y%m%d_%H%M')
-    train_log = f"train_log_{config['model']}_{timestamp}.csv"
-    test_log = f"test_log_{config['model']}_{timestamp}.csv"
+    experiment_dir = os.path.join(SAVE_DIR, f"{timestamp}_{config['model']}")
+    os.mkdir(experiment_dir)
+    for folder in ['Logs', 'Model', 'Results']:
+        os.mkdir(os.path.join(experiment_dir, folder))
+   
+    # Log names
+    train_log = os.path.join(experiment_dir, 'Logs', f"train_log.csv")
+    test_log = os.path.join(experiment_dir, 'Logs', f"test_log.csv")
+
+    # Filename to save the model
+    model_file = os.path.join(experiment_dir, 'Model', f"best_model.pt")
+    shutil.copy(args.config, os.path.join(experiment_dir, 'Model')) # Copy .yaml file
 
     # Instantiate the model
     model = getattr(models, config['model'])()
     model = model.to(config['device'])
-
-    # Filename to save the model
-    model_file_name = f'{timestamp}_best_NCNN.pt'
 
     # Define optimizer
     optimizer = getattr(optim, config['optimizer'])(model.parameters(), **config['optimizer_hyp'])
@@ -199,7 +211,7 @@ def main(config):
         if epoch_loss < best_val_loss:
             best_val_loss = epoch_loss
             counter = 0
-            torch.save(model.state_dict(), os.path.join('models', model_file_name))
+            torch.save(model.state_dict(), model_file)
         else:
             counter += 1
 
@@ -220,6 +232,11 @@ if __name__=='__main__':
 
     # Set manual seed
     torch.manual_seed(1234)
+
+    if os.path.exists(SAVE_DIR):
+        pass
+    else:
+        os.mkdir(SAVE_DIR)
 
     # Argument Parser
     parser = argparse.ArgumentParser()
