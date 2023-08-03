@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 import dataloaders
 import models
-from utils.utils import load_config, write_to_csv
+from utils.utils import load_config, write_to_csv, create_folder
 from validate import validation_metrics, validation_plots
 
 # Get current directory
@@ -147,9 +147,9 @@ def main(config):
     now = datetime.now()
     timestamp = now.strftime('%Y%m%d_%H%M')
     experiment_dir = os.path.join(SAVE_DIR, f"{timestamp}_{config['model']}")
-    os.mkdir(experiment_dir)
+    create_folder(experiment_dir)
     for folder in ['Logs', 'Model', 'Results']:
-        os.mkdir(os.path.join(experiment_dir, folder))
+        create_folder(os.path.join(experiment_dir, folder))
    
     # Log names
     train_log = os.path.join(experiment_dir, 'Logs', f"train_log.csv")
@@ -261,10 +261,7 @@ if __name__=='__main__':
     # Set manual seed
     torch.manual_seed(1234)
 
-    if os.path.exists(SAVE_DIR):
-        pass
-    else:
-        os.mkdir(SAVE_DIR)
+    create_folder(SAVE_DIR)
 
     # Argument Parser
     parser = argparse.ArgumentParser()

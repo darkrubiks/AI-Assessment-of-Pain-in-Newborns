@@ -61,3 +61,13 @@ def write_to_csv(filename, **kwargs):
         if mode == 'w':
             writer.writerow(kwargs.keys())  # Write header row if the file is new
         writer.writerow(kwargs.values())
+
+
+def create_folder(path):
+    """
+    Tries to create a folder on the informed path.
+    """
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        pass
