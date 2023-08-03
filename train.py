@@ -13,6 +13,7 @@ from datetime import datetime
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import torch.optim.lr_scheduler as schedulers
 from torch.utils.data import DataLoader
@@ -22,6 +23,15 @@ import dataloaders
 import models
 from utils.utils import load_config, write_to_csv
 from validate import validation_metrics
+
+
+def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0.0):
+    # Custom binary cross-entropy loss with label smoothing.
+    epsilon = 1.0 if epsilon > 1.0 else epsilon
+    smoothed_labels = (1 - epsilon) * labels + epsilon / 2
+    loss = nn.BCEWithLogitsLoss()(outputs, smoothed_labels)
+
+    return loss
 
 
 def load_dataset(config):
@@ -51,7 +61,7 @@ def load_dataset(config):
     return train_dataloader, test_dataloader
 
 
-def train(model, dataloader, criterion, optimizer, config):
+def train(model, dataloader, optimizer, config):
     # Train for one epoch
     model.train()
 
@@ -68,8 +78,7 @@ def train(model, dataloader, criterion, optimizer, config):
 
         # Calculate loss
         outputs = model(inputs)
-        _, preds = torch.max(outputs, 1)
-        loss = criterion(outputs, labels)
+        loss = label_smooth_binary_cross_entropy(outputs, labels, epsilon=config['label_smoothing'])
 
         # Backpropagation
         loss.backward()
@@ -77,9 +86,10 @@ def train(model, dataloader, criterion, optimizer, config):
 
         # Only when using soft labels
         if config['soft_label']:
-            _, labels = torch.max(labels, 1)
+            labels = torch.gt(labels, 0.5).type(torch.int)
 
         # Statistics
+        preds = torch.gt(F.sigmoid(outputs), 0.5).type(torch.int)
         running_loss += loss.item()
         preds_list = torch.cat([preds_list, preds])
         labels_list = torch.cat([labels_list, labels])
@@ -94,7 +104,7 @@ def train(model, dataloader, criterion, optimizer, config):
     return metrics
 
 
-def test(model, dataloader, criterion, config):
+def test(model, dataloader, config):
     # Test for one epoch
     model.eval()
 
@@ -110,10 +120,10 @@ def test(model, dataloader, criterion, config):
 
             # Calculate loss
             outputs = model(inputs)
-            _, preds = torch.max(outputs, 1)
-            loss = criterion(outputs, labels)
+            loss = label_smooth_binary_cross_entropy(outputs, labels, epsilon=config['label_smoothing'])
 
             # Statistics
+            preds = torch.gt(F.sigmoid(outputs), 0.5).type(torch.int)
             running_loss += loss.item()
             preds_list = torch.cat([preds_list, preds])
             labels_list = torch.cat([labels_list, labels])
@@ -139,10 +149,9 @@ def main(config):
     model = model.to(config['device'])
 
     # Filename to save the model
-    model_file_name = f'best_NCNN_fold.pt' # alterar essa porcaria
+    model_file_name = f'{timestamp}_best_NCNN.pt'
 
-    # Define criterion and optimizer
-    criterion = nn.CrossEntropyLoss(label_smoothing=config['label_smoothing'])
+    # Define optimizer
     optimizer = getattr(optim, config['optimizer'])(model.parameters(), **config['optimizer_hyp'])
 
     # Define scheduler
@@ -166,7 +175,7 @@ def main(config):
         train_dataloader.set_description(f"Train - Epoch [{epoch}/{config['epochs']}]")
 
         # Train function
-        train_metrics = train(model, train_dataloader, criterion, optimizer, config)
+        train_metrics = train(model, train_dataloader, optimizer, config)
         write_to_csv(train_log, **train_metrics)
 
         # Close TQDM after its iteration
@@ -177,7 +186,7 @@ def main(config):
         test_dataloader.set_description(f"Test  - Epoch [{epoch}/{config['epochs']}]")
         
         # Test function
-        test_metrics = test(model, test_dataloader, criterion, config)
+        test_metrics = test(model, test_dataloader, config)
         write_to_csv(test_log, **test_metrics)
 
         # Close TQDM after its iteration
@@ -186,7 +195,6 @@ def main(config):
         print()
 
         # Model saving
-        # TODO change to checkpoint?
         epoch_loss = test_metrics['Loss']
         if epoch_loss < best_val_loss:
             best_val_loss = epoch_loss
@@ -211,7 +219,7 @@ def main(config):
 if __name__=='__main__':
 
     # Set manual seed
-    torch.manual_seed(0)
+    torch.manual_seed(1234)
 
     # Argument Parser
     parser = argparse.ArgumentParser()
@@ -219,5 +227,10 @@ if __name__=='__main__':
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    if config['soft_label'] and config['label_smoothing'] !=0:
+        print('Please dont use soft labels and label smoothing together!')
+        print('Aborting...')
+        exit(0)
 
     main(config)

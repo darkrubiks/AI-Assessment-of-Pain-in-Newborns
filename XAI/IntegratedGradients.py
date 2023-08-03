@@ -64,14 +64,13 @@ class IntegratedGradients:
         return interpoleted
 
     def __compute_gradients(self,
-                            image: torch.Tensor,
-                            target_class: int) -> torch.Tensor:
+                            image: torch.Tensor) -> torch.Tensor:
         """
         Calculates gradients in order to measure the relationship between changes
         to a feature and changes in the model's predictions.
         """
         image = image.requires_grad_()
-        logit = self.model(image)[:, target_class]
+        logit = self.model(image)
         logit.sum().backward()
 
         return image.grad
@@ -89,7 +88,6 @@ class IntegratedGradients:
 
     def attribution_mask(self,
                          image: torch.Tensor,
-                         target_class: int,
                          n_steps: int=50) -> np.ndarray:
         """
         Generates the Integrated Gradients feature attributions.
@@ -98,7 +96,7 @@ class IntegratedGradients:
         baseline = torch.zeros(image.size()).to(self.device)
 
         interpoleted = self.__interpolate_image(baseline, image, n_steps)
-        gradients = self.__compute_gradients(interpoleted, target_class)
+        gradients = self.__compute_gradients(interpoleted)
         integrated_gradients = self.__integral_approximation(gradients)
         
         attribution = (image - baseline) * integrated_gradients
