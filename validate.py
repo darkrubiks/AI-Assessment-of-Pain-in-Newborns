@@ -7,7 +7,10 @@ Date: 12/07/2022
 Code for validating Deep Learning models.
 """
 import numpy as np
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+                             recall_score)
+
+from calibration.metrics import ECE, MCE, brier_score, negative_log_likelihood
 from utils.plots import *
 
 
@@ -33,6 +36,33 @@ def validation_metrics(preds: np.ndarray,
     recall = recall_score(labels, preds, zero_division=0)
 
     metrics = {'Accuracy': acc, 'F1 Score': f1, 'Precision': precision, 'Recall': recall}
+
+    return metrics
+
+
+def calibration_metrics(probs: np.ndarray,
+                        labels: np.ndarray,
+                        n_bins: int=10) -> dict:
+    """
+    Returns a dictionary with the following metrics: ECE, MCE,
+    NLL, and Brier Score.
+
+    Parameters
+    ----------
+    probs : probability of the positive class
+
+    labels : the original labels for each sample
+
+    Returns
+    -------
+    metrics : a dictionary containing the metrics
+    """
+    ece = ECE(probs, labels, n_bins)
+    mce = MCE(probs, labels, n_bins)
+    nll = negative_log_likelihood(probs, labels)
+    brier = brier_score(probs, labels)
+
+    metrics = {'ECE': ece, 'MCE': mce, 'NLL': nll, 'Brier': brier}
 
     return metrics
 
