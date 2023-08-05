@@ -198,11 +198,15 @@ def plot_results_above_threshold(probs: np.ndarray,
             else:
                 above_threshold[i] = metrics[key](labels, preds, zero_division=0)
 
+            if thr == 0.5:
+                result = above_threshold[i]
+
         nonzero = np.array(above_threshold) != 0
         plt.figure()
-        plt.plot(threshold[nonzero], above_threshold[nonzero], color=COLOR)
+        plt.plot(threshold[nonzero], above_threshold[nonzero], color=COLOR, label=f'{key} at 0.5 = {result:.4f}')
         plt.xlabel('Confidence Threshold')
         plt.ylabel(key)
+        plt.legend()
         plt.savefig(os.path.join(path,f'{key}.png'), 
                     dpi=300, 
                     bbox_inches='tight')
