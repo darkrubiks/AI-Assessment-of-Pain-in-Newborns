@@ -157,7 +157,7 @@ def main(config):
 
     # Filename to save the model
     model_file = os.path.join(experiment_dir, 'Model', f"best_model.pt")
-    shutil.copy(args.config, os.path.join(experiment_dir, 'Model')) # Copy .yaml file
+    shutil.copy(args.config, os.path.join(experiment_dir, 'Model', 'config.yaml')) # Copy .yaml file
 
     # Instantiate the model
     model = getattr(models, config['model'])()
