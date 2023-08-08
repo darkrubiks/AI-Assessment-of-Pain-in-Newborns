@@ -83,7 +83,7 @@ folds_path = os.path.join('Datasets','Folds')
 # For each Fold the images are augmented 20 times, verifying that the landmarks
 # are still in bounds of the new image
 for fold in range(N_FOLDS):
-    print(f'Augmenting Fold: {fold:02}')
+    print(f'\nAugmenting Fold: {fold:02}')
 
     fold = str(fold)
 
