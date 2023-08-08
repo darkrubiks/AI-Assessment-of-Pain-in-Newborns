@@ -7,11 +7,10 @@ Date: 08/05/2023
 This file contains calibrators for classification models.
 """
 import numpy as np
-from scipy.optimize import fmin_bfgs, minimize
+from scipy.optimize import fmin_bfgs
 from sklearn.isotonic import IsotonicRegression
 
 from calibration.metrics import negative_log_likelihood
-
 
 def softmax(logit: np.ndarray) -> np.ndarray:
     """
@@ -77,16 +76,13 @@ class TemperatureScaling:
 
         labels : the true labels as binary targets
         """
-
         def _objective(T):
             return negative_log_likelihood(sigmoid(logit / T), labels)
 
-        result = minimize(_objective, x0=3.0, method="L-BFGS-B", bounds=[(1.0, None)], tol=1e-7)
-
-        if result.success:
-            self.T = result.x
-        else:
-            print("Minimization did not converge!")
+        T = np.array([1.0])
+        result = fmin_bfgs(_objective, T,  disp=False)
+        
+        self.T = result[0]
 
     def predict(self, logit: np.ndarray) -> np.ndarray:
         """
