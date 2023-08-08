@@ -7,7 +7,7 @@ Date: 08/05/2023
 This file contains calibrators for classification models.
 """
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import fmin_bfgs, minimize
 from sklearn.isotonic import IsotonicRegression
 
 from calibration.metrics import negative_log_likelihood
@@ -194,17 +194,23 @@ class PlattScaling:
         T[labels <= 0] = 1.0 / (N_minus + 2.0)
 
         def _objective(AB):
-            P = 1 / (1 + np.exp(-(AB[0] * probs + AB[1])))
+            P = 1 / (1 + np.exp((AB[0] * probs + AB[1])))
             return negative_log_likelihood(P, T)
+        
+        def _grad(AB):
+            # gradient of the objective function
+            P = 1 / (1 + np.exp((AB[0] * probs + AB[1])))
+            TEP_minus_T1P = T - P
+            
+            dA = np.dot(TEP_minus_T1P, probs)
+            dB = np.sum(TEP_minus_T1P)
+            return np.array([dA, dB])
 
         AB0 = np.array([0.0, np.log((N_minus + 1.0) / (N_plus + 1.0))])
-        result = minimize(_objective, x0=AB0, method="L-BFGS-B", tol=1e-7)
+        result = fmin_bfgs(_objective, AB0, fprime=_grad, disp=False)
 
-        if result.success:
-            self.A = result.x[0]
-            self.B = result.x[1]
-        else:
-            print("Minimization did not converge!")
+        self.A = result[0]
+        self.B = result[1]
 
     def predict(self, probs: np.ndarray) -> np.ndarray:
         """
@@ -219,7 +225,6 @@ class PlattScaling:
         -------
         the calibrated probabilities ranging from [0-1]
         """
-        calibrated_probs = probs * self.A + self.B
-        calibrated_probs = sigmoid(calibrated_probs)
+        calibrated_probs = 1 / (1 + np.exp((self.A * probs + self.B)))
 
         return calibrated_probs
