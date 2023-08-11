@@ -41,14 +41,12 @@ def plot_calibration_curve(probs: np.ndarray,
     path : where to save the plot image. Defaults to current directory.
     """
     fig = plt.figure()
+    gs = fig.add_gridspec(2, 1,  height_ratios=(3, 1), left=0.1, right=0.9, bottom=0.1, top=0.9, hspace=0.05)
 
-    gs = fig.add_gridspec(2, 2,  width_ratios=(4, 1), height_ratios=(3, 1),
-                          left=0.1, right=0.9, bottom=0.1, top=0.9, hspace=0.05)
+    ax_curve = fig.add_subplot(gs[0])
+    ax_hist = fig.add_subplot(gs[1], sharex=ax_curve)
     
-    ax_curve = fig.add_subplot(gs[0, 0])
-    ax_hist = fig.add_subplot(gs[1, 0], sharex=ax_curve)
-    
-    prob_true, prob_pred, bin_samples =  calibration_curve(probs, labels, n_bins)
+    prob_true, prob_pred, _ =  calibration_curve(probs, labels, n_bins)
     
     ece = ECE(probs, labels, n_bins)
 
