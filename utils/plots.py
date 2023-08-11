@@ -21,8 +21,7 @@ COLOR = '#303eba'
 
 def plot_calibration_curve(probs: np.ndarray, 
                            labels: np.ndarray, 
-                           n_bins: int=10, 
-                           plot_samples: bool=False,
+                           n_bins: int=10,
                            path: str=os.getcwd()) -> None:
     """
     Plots the calibration curve. It is also possible to include the amount
@@ -41,22 +40,29 @@ def plot_calibration_curve(probs: np.ndarray,
 
     path : where to save the plot image. Defaults to current directory.
     """
-    prob_true, prob_pred, bin_samples =  calibration_curve(probs, labels, n_bins)
+    fig = plt.figure()
 
+    gs = fig.add_gridspec(2, 2,  width_ratios=(4, 1), height_ratios=(3, 1),
+                          left=0.1, right=0.9, bottom=0.1, top=0.9, hspace=0.05)
+    
+    ax_curve = fig.add_subplot(gs[0, 0])
+    ax_hist = fig.add_subplot(gs[1, 0], sharex=ax_curve)
+    
+    prob_true, prob_pred, bin_samples =  calibration_curve(probs, labels, n_bins)
+    
     ece = ECE(probs, labels, n_bins)
 
-    if plot_samples:
-        total_bins = bin_samples.sum()
-        for i, bin in enumerate(bin_samples):
-            plt.plot(prob_pred[i], prob_true[i], 
-                     marker='o', color=COLOR, markersize=int((bin/total_bins)*100))
+    ax_curve.plot(prob_pred, prob_true,  linestyle='-', marker='o', color=COLOR, label=f'ECE = {ece:.4f}')
+    ax_curve.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
+    ax_hist.hist(probs, bins=n_bins, color=COLOR)
 
-    plt.plot(prob_pred, prob_true,  linestyle='-', marker='o', color=COLOR, label=f'ECE = {ece:.4f}')
-    plt.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
-    plt.title(f'Calibration Curve')
-    plt.xlabel('Mean Predicted Confidence')
-    plt.ylabel('Fraction of Positives')
-    plt.legend()
+    ax_curve.set_title('Calibration Curve')
+    ax_curve.set_ylabel('Fraction of Positives')
+    ax_curve.legend()
+
+    ax_hist.set_xlabel('Mean Predicted Confidence')
+    ax_hist.set_ylabel('Count')
+
     plt.savefig(os.path.join(path,'calibration_curve.png'), 
                 dpi=300, 
                 bbox_inches='tight')
