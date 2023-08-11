@@ -10,7 +10,7 @@ from utils.utils import create_folder
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
 DATASETS_FOLDER_PATH = os.path.join('Datasets', 'DatasetFaces')
 CALIBRATION_FOLDER_PATH = os.path.join('Datasets', 'Calibration')
-CALIBRATION_SIZE = 0.1
+CALIBRATION_SIZE = 0.2
 N_FOLDS = 5
 
 def copy_files(src_files, dst_folder):
@@ -60,7 +60,7 @@ train_subjects = []
 test_subjects = []
 
 # The StratifiedKFold is used to split the data between subjects but also consider their original datasets, achieving balance between datasets
-skf = StratifiedKFold(n_splits=N_FOLDS)
+skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=42)
 
 for train_index, test_index in skf.split(unique_subjects, datasets):
     train_subjects.append([unique_subjects[i] for i in train_index])
