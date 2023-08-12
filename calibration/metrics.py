@@ -6,9 +6,11 @@ Date: 06/05/2023
 
 This file contains metrics that can be used to validate the model's calibration.
 """
-import numpy as np
-from sklearn.metrics import brier_score_loss
 from typing import Tuple
+
+import numpy as np
+from scipy.special import xlogy
+from sklearn.metrics import brier_score_loss
 
 
 def _bin_data(probs: np.ndarray,
@@ -97,7 +99,6 @@ def MCE(probs: np.ndarray,
 
     return mce
 
-
 def negative_log_likelihood(probs: np.ndarray,
                             labels: np.ndarray) -> np.float32:
     """
@@ -113,7 +114,7 @@ def negative_log_likelihood(probs: np.ndarray,
     -------
     nll : the Negative Log Likelihood
     """
-    nll = -(labels * np.log(probs) + (1 - labels) * np.log(1 - probs))
+    nll = -(xlogy(labels, probs) + xlogy(1 - labels, 1 - probs))
 
     return nll.mean()
 
