@@ -60,7 +60,7 @@ train_subjects = []
 test_subjects = []
 
 # The StratifiedKFold is used to split the data between subjects but also consider their original datasets, achieving balance between datasets
-skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=42)
+skf = StratifiedKFold(n_splits=N_FOLDS)
 
 for train_index, test_index in skf.split(unique_subjects, datasets):
     train_subjects.append([unique_subjects[i] for i in train_index])
