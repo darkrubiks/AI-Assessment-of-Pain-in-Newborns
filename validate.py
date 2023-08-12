@@ -82,7 +82,7 @@ def validation_plots(preds: np.ndarray,
 
     labels : the original labels for each sample
     """
-    plot_calibration_curve(probs, labels, plot_samples=True, path=path)
+    plot_calibration_curve(probs, labels, path=path)
     plot_confusion_matrix(preds, labels, ['No Pain', 'Pain'], path)
     plot_roc_curve(probs, labels, path)
     plot_pre_rec_curve(probs, labels, path)
