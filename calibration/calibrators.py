@@ -65,38 +65,47 @@ class TemperatureScaling:
     def __init__(self) -> None:
         self.T = None
 
-    def fit(self, logit: np.ndarray, labels: np.ndarray) -> None:
+    def _get_logits(self, probs: np.ndarray) -> np.ndarray:
+        return np.log(probs/(1-probs))
+
+    def fit(self, probs: np.ndarray, labels: np.ndarray) -> None:
         """
         Minimizes the Negative Log Likelihood of the labels and logit
         to find the best temperature value.
 
         Parameters
         ----------
-        logit : the output of the model in logit form
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
 
         labels : the true labels as binary targets
         """
+        logits = self._get_logits(probs)
+
         def _objective(T):
-            return negative_log_likelihood(sigmoid(logit / T), labels)
+            return negative_log_likelihood(sigmoid(logits / T), labels)
 
         T = np.array([1.0])
         result = fmin_bfgs(_objective, T,  disp=False)
         
         self.T = result[0]
 
-    def predict(self, logit: np.ndarray) -> np.ndarray:
+    def predict(self, probs: np.ndarray) -> np.ndarray:
         """
         Returns the calibrated probabilities.
 
         Parameters
         ----------
-        logit : the output of the model in logit form
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
 
         Returns
         -------
         the calibrated probabilities ranging from [0-1]
         """
-        calibrated_probs = sigmoid(logit / self.T)
+        logits = self._get_logits(probs)
+
+        calibrated_probs = sigmoid(logits / self.T)
 
         return calibrated_probs
 
