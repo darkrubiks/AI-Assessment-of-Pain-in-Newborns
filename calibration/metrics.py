@@ -114,6 +114,8 @@ def negative_log_likelihood(probs: np.ndarray,
     -------
     nll : the Negative Log Likelihood
     """
+    eps = np.finfo(probs.dtype).eps
+    probs = np.clip(probs, eps, 1 - eps)
     nll = -(xlogy(labels, probs) + xlogy(1 - labels, 1 - probs))
 
     return nll.mean()
