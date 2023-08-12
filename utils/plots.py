@@ -52,7 +52,7 @@ def plot_calibration_curve(probs: np.ndarray,
 
     ax_curve.plot(prob_pred, prob_true,  linestyle='-', marker='o', color=COLOR, label=f'ECE = {ece:.4f}')
     ax_curve.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
-    ax_hist.hist(probs, bins=n_bins, color=COLOR)
+    ax_hist.hist(probs, bins=n_bins, color=COLOR, edgecolor='k')
 
     ax_curve.set_title('Calibration Curve')
     ax_curve.set_ylabel('Fraction of Positives')
