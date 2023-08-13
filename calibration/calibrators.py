@@ -12,6 +12,7 @@ from sklearn.isotonic import IsotonicRegression
 
 from calibration.metrics import negative_log_likelihood
 
+
 def softmax(logit: np.ndarray) -> np.ndarray:
     """
     Returns the logit of a neural network as softmaxes probabilities.
@@ -66,7 +67,7 @@ class TemperatureScaling:
         self.T = None
 
     def _get_logits(self, probs: np.ndarray) -> np.ndarray:
-        return np.log(probs/(1-probs))
+        return np.log(probs / (1 - probs))
 
     def fit(self, probs: np.ndarray, labels: np.ndarray) -> None:
         """
@@ -86,8 +87,8 @@ class TemperatureScaling:
             return negative_log_likelihood(sigmoid(logits / T), labels)
 
         T = np.array([1.0])
-        result = fmin_bfgs(_objective, T,  disp=False)
-        
+        result = fmin_bfgs(_objective, T, disp=False)
+
         self.T = result[0]
 
     def predict(self, probs: np.ndarray) -> np.ndarray:
@@ -201,12 +202,12 @@ class PlattScaling:
         def _objective(AB):
             P = 1 / (1 + np.exp((AB[0] * probs + AB[1])))
             return negative_log_likelihood(P, T)
-        
+
         def _grad(AB):
             # gradient of the objective function
             P = 1 / (1 + np.exp((AB[0] * probs + AB[1])))
             TEP_minus_T1P = T - P
-            
+
             dA = np.dot(TEP_minus_T1P, probs)
             dB = np.sum(TEP_minus_T1P)
             return np.array([dA, dB])
@@ -231,5 +232,64 @@ class PlattScaling:
         the calibrated probabilities ranging from [0-1]
         """
         calibrated_probs = 1 / (1 + np.exp((self.A * probs + self.B)))
+
+        return calibrated_probs
+
+
+class HistogramBinning:
+    """
+    Histogram Binning to calibrate the models predictions. Very simple and fast algorithm,
+    it involves partitioning predicted probabilities into bins, calculating observed true
+    frequency of events in each bin and adjusting predicted probabilities that fall in these
+    bins.
+
+    See Also
+    --------
+    Zadrozny, Bianca and Elkan, Charles. "Obtaining calibrated probability estimates from
+    decision trees and naive bayesian classifiers". In ICML. 2001.
+    """
+
+    def __init__(self) -> None:
+        self.bins = None
+        self.prob_true = None
+
+    def fit(self, probs: np.ndarray, labels: np.ndarray, n_bins: int = 10) -> None:
+        """
+        Calculate the observed true frequency of envents in each bin. That later will be used
+        to predict new calibrated probabilites.
+
+        Parameters
+        ----------
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
+
+        labels : the true labels as binary targets
+
+        n_bins : number of bins to discretize
+        """
+        self.bins = np.linspace(0.0, 1.0, n_bins + 1)
+        binids = np.searchsorted(self.bins[1:-1], probs)
+
+        bin_true = np.bincount(binids, weights=labels, minlength=len(self.bins))
+        bin_total = np.bincount(binids, minlength=len(self.bins))
+
+        nonzero = bin_total != 0
+        self.prob_true = bin_true[nonzero] / bin_total[nonzero]
+
+    def predict(self, probs: np.ndarray) -> np.ndarray:
+        """
+        Returns the calibrated probabilities.
+
+        Parameters
+        ----------
+        probs : the output of the model in probability form. Only supports
+        binary problems, provide it with the "True/Positive" class probability
+
+        Returns
+        -------
+        the calibrated probabilities ranging from [0-1]
+        """
+        binids = np.searchsorted(self.bins[1:-1], probs)
+        calibrated_probs = self.prob_true[binids]
 
         return calibrated_probs
