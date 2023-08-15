@@ -58,7 +58,7 @@ def plot_calibration_curve(probs: np.ndarray,
     ax_curve.set_ylabel('Fraction of Positives')
     ax_curve.legend()
 
-    ax_hist.set_xlabel('Mean Predicted Confidence')
+    ax_hist.set_xlabel('Mean Predicted Probability')
     ax_hist.set_ylabel('Count')
 
     plt.savefig(os.path.join(path,'calibration_curve.png'), 
@@ -172,7 +172,7 @@ def plot_results_above_threshold(probs: np.ndarray,
                                  path: str=os.getcwd()) -> None:
     """
     Plots the Accuracy, Precision, Recall and F1 Score results
-    by changing the confidence threshold.
+    by changing the probability threshold.
 
     Parameters
     ----------
@@ -208,7 +208,7 @@ def plot_results_above_threshold(probs: np.ndarray,
         nonzero = np.array(above_threshold) != 0
         plt.figure()
         plt.plot(threshold[nonzero], above_threshold[nonzero], color=COLOR, label=f'{key} at 0.5 = {result:.4f}')
-        plt.xlabel('Confidence Threshold')
+        plt.xlabel('Probability Threshold')
         plt.ylabel(key)
         plt.legend()
         plt.savefig(os.path.join(path,f'{key}.png'), 
