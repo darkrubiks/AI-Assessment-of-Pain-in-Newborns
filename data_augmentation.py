@@ -92,7 +92,7 @@ for fold in range(N_FOLDS):
 
     print('Applying to Test Set')
     for file_name in tqdm(os.listdir(test_fold_path)):
-        if '.jpg' in file_name:
+        if file_name.endswith('.jpg'):
             _ = resize_original_img(test_fold_path, file_name)
 
     print('Applying to Train Set')
