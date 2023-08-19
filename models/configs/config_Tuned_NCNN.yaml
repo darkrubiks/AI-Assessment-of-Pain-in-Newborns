@@ -18,12 +18,12 @@ soft_label: False
 label_smoothing: 0.3
 optimizer: RMSprop
 optimizer_hyp:
-  lr: 0.001
-  weight_decay: 0.00001
+  lr: 1.0e-03
+  weight_decay: 1.0e-05
 scheduler: CosineAnnealingLR
 scheduler_hyp:
   T_max: 5
-  eta_min: 0.000001
+  eta_min: 1.0e-06
 
 
 

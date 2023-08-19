@@ -18,8 +18,8 @@ soft_label: False
 label_smoothing: 0
 optimizer: RMSprop
 optimizer_hyp:
-  lr: 0.00001
-  weight_decay: 0.00001
+  lr: 1.0e-05
+  weight_decay: 1.0e-05
 
 
 
