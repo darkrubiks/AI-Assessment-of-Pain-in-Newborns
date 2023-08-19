@@ -22,6 +22,7 @@ COLOR = '#303eba'
 def plot_calibration_curve(probs: np.ndarray, 
                            labels: np.ndarray, 
                            n_bins: int=10,
+                           mode: str='uniform',
                            path: str=os.getcwd()) -> None:
     """
     Plots the calibration curve. It is also possible to include the amount
@@ -35,8 +36,8 @@ def plot_calibration_curve(probs: np.ndarray,
 
     n_bins : number of bins to discretize
 
-    plot_samples : if True it will also plot the amount of samples in each
-    bin like a circle where a bigger radius means more samples
+    mode : "uniform" for equal width bins or "quantile" for 
+    equal amount of samples in bins
 
     path : where to save the plot image. Defaults to current directory.
     """
@@ -46,9 +47,9 @@ def plot_calibration_curve(probs: np.ndarray,
     ax_curve = fig.add_subplot(gs[0])
     ax_hist = fig.add_subplot(gs[1], sharex=ax_curve)
     
-    prob_true, prob_pred, _ =  calibration_curve(probs, labels, n_bins)
+    prob_true, prob_pred, _ =  calibration_curve(probs, labels, n_bins, mode)
     
-    ece = ECE(probs, labels, n_bins)
+    ece = ECE(probs, labels, n_bins, mode)
 
     ax_curve.plot(prob_pred, prob_true,  linestyle='-', marker='o', color=COLOR, label=f'ECE = {ece:.4f}')
     ax_curve.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')

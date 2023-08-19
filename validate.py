@@ -42,7 +42,8 @@ def validation_metrics(preds: np.ndarray,
 
 def calibration_metrics(probs: np.ndarray,
                         labels: np.ndarray,
-                        n_bins: int=10) -> dict:
+                        n_bins: int=10,
+                        mode: str='uniform') -> dict:
     """
     Returns a dictionary with the following metrics: ECE, MCE,
     NLL, and Brier Score.
@@ -53,12 +54,15 @@ def calibration_metrics(probs: np.ndarray,
 
     labels : the original labels for each sample
 
+    mode : "uniform" for equal width bins or "quantile" for 
+    equal amount of samples in bins. Used for ECE and MCE
+
     Returns
     -------
     metrics : a dictionary containing the metrics
     """
-    ece = ECE(probs, labels, n_bins)
-    mce = MCE(probs, labels, n_bins)
+    ece = ECE(probs, labels, n_bins, mode)
+    mce = MCE(probs, labels, n_bins, mode)
     nll = negative_log_likelihood(probs, labels)
     brier = brier_score(probs, labels)
 
@@ -70,6 +74,7 @@ def calibration_metrics(probs: np.ndarray,
 def validation_plots(preds: np.ndarray,
                      probs: np.ndarray,
                      labels: np.ndarray,
+                     mode: str='uniform',
                      path: str=os.getcwd()) -> None:
     """
     Creates all the available plots for validation.
@@ -81,8 +86,11 @@ def validation_plots(preds: np.ndarray,
     probs : probability of the positive class
 
     labels : the original labels for each sample
+
+    mode : "uniform" for equal width bins or "quantile" for 
+    equal amount of samples in bins. Used for calibration plot
     """
-    plot_calibration_curve(probs, labels, path=path)
+    plot_calibration_curve(probs, labels, mode=mode, path=path)
     plot_confusion_matrix(preds, labels, ['No Pain', 'Pain'], path)
     plot_roc_curve(probs, labels, path)
     plot_pre_rec_curve(probs, labels, path)

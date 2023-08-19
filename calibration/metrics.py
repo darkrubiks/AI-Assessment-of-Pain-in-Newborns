@@ -15,11 +15,19 @@ from sklearn.metrics import brier_score_loss
 
 def _bin_data(probs: np.ndarray,
               labels: np.ndarray,
-              n_bins: int=10) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+              n_bins: int=10,
+              mode: str='uniform') -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Bins the probabilities and labels.
     """
-    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    if mode == 'uniform':
+        # Equal width bins
+        bins = np.linspace(0.0, 1.0, n_bins + 1)
+    elif mode == 'quantile':
+        # Same number of samples in each bin
+        quantiles = np.linspace(0, 1, n_bins + 1)
+        bins = np.percentile(probs, quantiles * 100)
+
     binids = np.searchsorted(bins[1:-1], probs)
 
     bin_sums = np.bincount(binids, weights=probs, minlength=len(bins))
@@ -35,7 +43,8 @@ def _bin_data(probs: np.ndarray,
 
 def ECE(probs: np.ndarray,
         labels: np.ndarray,
-        n_bins: int=10) -> np.float32:
+        n_bins: int=10,
+        mode: str='uniform') -> np.float32:
     """
     Calculates the Expected Calibration Error of a model.
 
@@ -46,6 +55,9 @@ def ECE(probs: np.ndarray,
     labels : true labels as binary targets
 
     n_bins : number of bins to discretize
+
+    mode : "uniform" for equal width bins or "quantile" for 
+    equal amount of samples in bins
 
     Returns
     -------
@@ -59,7 +71,7 @@ def ECE(probs: np.ndarray,
 
     doi : https://doi.org/10.1609/aaai.v29i1.9602
     """
-    prob_true, prob_pred, bin_total = _bin_data(probs, labels, n_bins)
+    prob_true, prob_pred, bin_total = _bin_data(probs, labels, n_bins, mode)
 
     P =  bin_total/np.sum(bin_total)
     ece = np.sum(np.abs(prob_true - prob_pred) * P)
@@ -69,7 +81,8 @@ def ECE(probs: np.ndarray,
 
 def MCE(probs: np.ndarray,
         labels: np.ndarray,
-        n_bins: int=10) -> np.float32:
+        n_bins: int=10,
+        mode: str='uniform') -> np.float32:
     """
     Calculates the Maximum Calibration Error of a model.
 
@@ -80,6 +93,9 @@ def MCE(probs: np.ndarray,
     labels : true labels as binary targets
 
     n_bins : number of bins to discretize
+
+    mode : "uniform" for equal width bins or "quantile" for 
+    equal amount of samples in bins
 
     Returns
     -------
@@ -93,7 +109,7 @@ def MCE(probs: np.ndarray,
 
     doi: https://doi.org/10.1609/aaai.v29i1.9602
     """
-    prob_true, prob_pred, _ = _bin_data(probs, labels, n_bins)
+    prob_true, prob_pred, _ = _bin_data(probs, labels, n_bins, mode)
 
     mce = np.max(np.abs(prob_true - prob_pred))
 
@@ -147,7 +163,8 @@ def brier_score(probs: np.ndarray,
 
 def calibration_curve(probs: np.ndarray,
                       labels: np.ndarray,
-                      n_bins: int=10) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                      n_bins: int=10,
+                      mode: str='uniform') -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute true and predicted probabilities for a calibration curve.
 
@@ -162,6 +179,9 @@ def calibration_curve(probs: np.ndarray,
 
     n_bins : number of bins to discretize
 
+    mode : "uniform" for equal width bins or "quantile" for 
+    equal amount of samples in bins
+
     Returns
     -------
     prob_true : the proportion of samples whose class is the positive class,
@@ -175,6 +195,6 @@ def calibration_curve(probs: np.ndarray,
     --------
     scikitlearn : https://scikit-learn.org/stable/modules/generated/sklearn.calibration.calibration_curve.html
     """
-    prob_true, prob_pred, bin_total = _bin_data(probs, labels, n_bins)
+    prob_true, prob_pred, bin_total = _bin_data(probs, labels, n_bins, mode)
     
     return prob_true, prob_pred, bin_total
