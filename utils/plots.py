@@ -1,7 +1,6 @@
 import os
 from typing import List
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import (accuracy_score, average_precision_score,
@@ -11,13 +10,7 @@ from sklearn.metrics import (accuracy_score, average_precision_score,
 
 from calibration.metrics import ECE, calibration_curve
 
-matplotlib.rcParams['font.size'] = 12
-matplotlib.rcParams['font.family'] = 'Times New Roman'
-matplotlib.rcParams['axes.spines.right'] = False
-matplotlib.rcParams['axes.spines.top'] = False
-
-COLOR = '#303eba'
-
+plt.style.use('utils\plotstyle.mplstyle')
 
 def plot_calibration_curve(probs: np.ndarray, 
                            labels: np.ndarray, 
@@ -25,8 +18,8 @@ def plot_calibration_curve(probs: np.ndarray,
                            mode: str='uniform',
                            path: str=os.getcwd()) -> None:
     """
-    Plots the calibration curve. It is also possible to include the amount
-    of samples in each bin as a circle with dynamic radius.
+    Plots the calibration curve. It also includes the predictions probabilities
+    histogram.
 
     Parameters
     ----------
@@ -42,7 +35,7 @@ def plot_calibration_curve(probs: np.ndarray,
     path : where to save the plot image. Defaults to current directory.
     """
     fig = plt.figure()
-    gs = fig.add_gridspec(2, 1,  height_ratios=(3, 1), left=0.1, right=0.9, bottom=0.1, top=0.9, hspace=0.05)
+    gs = fig.add_gridspec(2, 1,  height_ratios=(3, 1), left=0.1, right=0.9, bottom=0.1, top=0.9, hspace=0.02)
 
     ax_curve = fig.add_subplot(gs[0])
     ax_hist = fig.add_subplot(gs[1], sharex=ax_curve)
@@ -51,9 +44,9 @@ def plot_calibration_curve(probs: np.ndarray,
     
     ece = ECE(probs, labels, n_bins, mode)
 
-    ax_curve.plot(prob_pred, prob_true,  linestyle='-', marker='o', color=COLOR, label=f'ECE = {ece:.4f}')
+    ax_curve.plot(prob_pred, prob_true,  linestyle='-', marker='o', label=f'ECE = {ece:.4f}')
     ax_curve.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
-    ax_hist.hist(probs, bins=n_bins, color=COLOR, edgecolor='k')
+    ax_hist.hist(probs, bins=n_bins, edgecolor='k')
 
     ax_curve.set_title('Calibration Curve')
     ax_curve.set_ylabel('Fraction of Positives')
@@ -128,7 +121,7 @@ def plot_roc_curve(probs: np.ndarray,
 
     auc = roc_auc_score(labels, probs)
 
-    plt.plot(fpr, tpr, color=COLOR, label=f'AUC = {auc:.4f}')
+    plt.plot(fpr, tpr, label=f'AUC = {auc:.4f}')
     plt.title(f'ROC Curve')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Postive Rate')
@@ -157,7 +150,7 @@ def plot_pre_rec_curve(probs: np.ndarray,
 
     ap = average_precision_score(labels, probs)
     
-    plt.plot(recall, precision, color=COLOR, label=f'AP = {ap:.4f}')
+    plt.plot(recall, precision, label=f'AP = {ap:.4f}')
     plt.title(f'Precision-Recall Curve ')
     plt.xlabel('Recall')
     plt.ylabel('Precision')
@@ -208,7 +201,7 @@ def plot_results_above_threshold(probs: np.ndarray,
 
         nonzero = np.array(above_threshold) != 0
         plt.figure()
-        plt.plot(threshold[nonzero], above_threshold[nonzero], color=COLOR, label=f'{key} at 0.5 = {result:.4f}')
+        plt.plot(threshold[nonzero], above_threshold[nonzero], label=f'{key} at 0.5 = {result:.4f}')
         plt.xlabel('Probability Threshold')
         plt.ylabel(key)
         plt.legend()
