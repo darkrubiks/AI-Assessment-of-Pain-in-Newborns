@@ -32,7 +32,7 @@ class FeatureMaps:
     def __init__(self, 
                  model: torch.nn.Module,
                  target_layer: torch.nn.Module,
-                 device: str) -> None:
+                 device: str='cpu') -> None:
         self.device = device
         self.model = model.eval().to(self.device)
         self.target_layer = target_layer
