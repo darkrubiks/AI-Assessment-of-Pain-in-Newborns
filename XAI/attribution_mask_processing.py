@@ -47,17 +47,22 @@ def attribution_mask_processing(attribution_mask: np.ndarray,
     # Checks if the attribution_mask has 3 dimensions
     if len(attribution_mask.shape) <= 2:
         attribution_mask = np.expand_dims(attribution_mask, axis=-1)
+
     # Fit he kmeans to the flattened attribution_mask
-    kmeans = KMeans(n_clusters=n_clusters, random_state=123)
+    kmeans = KMeans(n_clusters=n_clusters, n_init='auto', random_state=123)
     kmeans.fit(attribution_mask.reshape(-1, 1))
+
     # Assign to each pixel the corresponding cluster center from kmeans
     cluster_centers = kmeans.cluster_centers_
     result = cluster_centers[kmeans.labels_.flatten()]
+
     # Reshape to the original size
     result = result.reshape((attribution_mask.shape))
     result = np.squeeze(result)
+
     # Apply Gaussian Blur
     result = cv2.GaussianBlur(result,(ksize,ksize), sigma)
+
     # Creates the alpha channel
     alpha_channel = np.ones(np.squeeze(result).shape, dtype=result.dtype)
     alpha_channel[np.where(result <= result.mean() + 

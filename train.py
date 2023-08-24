@@ -23,7 +23,7 @@ from tqdm import tqdm
 import dataloaders
 import models
 from utils.utils import load_config, write_to_csv, create_folder
-from validate import validation_metrics, validation_plots
+from validate import validation_metrics, validation_plots, calibration_metrics
 
 # Get current directory
 ROOT = os.getcwd()
@@ -72,6 +72,7 @@ def train(model, dataloader, optimizer, config):
 
     running_loss = 0.0
     preds_list = torch.empty(0, device=config['device'])
+    probs_list = torch.empty(0, device=config['device'])
     labels_list = torch.empty(0, device=config['device'])
  
     for i,batch in enumerate(dataloader, start=1):
@@ -94,14 +95,17 @@ def train(model, dataloader, optimizer, config):
             labels = torch.gt(labels, 0.5).type(torch.int)
 
         # Statistics
-        preds = torch.gt(F.sigmoid(outputs), 0.5).type(torch.int)
+        probs = F.sigmoid(outputs).detach()
+        preds = torch.gt(probs, 0.5).type(torch.int)
         running_loss += loss.item()
         preds_list = torch.cat([preds_list, preds])
+        probs_list = torch.cat([probs_list, probs])
         labels_list = torch.cat([labels_list, labels])
 
         # Only update after 20 batches
         if i % 20 == 0:
             metrics = validation_metrics(preds_list.cpu().numpy(), labels_list.cpu().numpy())
+            metrics.update(calibration_metrics(probs_list.cpu().numpy(), labels_list.cpu().numpy()))
             metrics.update({'Loss': running_loss/i})
             # Update progress bar
             dataloader.set_postfix(metrics)
@@ -115,6 +119,7 @@ def test(model, dataloader, config):
 
     running_loss = 0.0
     preds_list = torch.empty(0, device=config['device'])
+    probs_list = torch.empty(0, device=config['device'])
     labels_list = torch.empty(0, device=config['device'])
 
     # Disable gradient computation and reduce memory consumption
@@ -128,12 +133,15 @@ def test(model, dataloader, config):
             loss = label_smooth_binary_cross_entropy(outputs, labels, epsilon=config['label_smoothing'])
 
             # Statistics
-            preds = torch.gt(F.sigmoid(outputs), 0.5).type(torch.int)
+            probs = F.sigmoid(outputs).detach()
+            preds = torch.gt(probs, 0.5).type(torch.int)
             running_loss += loss.item()
             preds_list = torch.cat([preds_list, preds])
+            probs_list = torch.cat([probs_list, probs])
             labels_list = torch.cat([labels_list, labels])
 
             metrics = validation_metrics(preds_list.cpu().numpy(), labels_list.cpu().numpy())
+            metrics.update(calibration_metrics(probs_list.cpu().numpy(), labels_list.cpu().numpy()))
             metrics.update({'Loss': running_loss/i})
 
             # Update progress bar
