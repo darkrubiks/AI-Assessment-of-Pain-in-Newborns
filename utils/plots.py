@@ -44,8 +44,8 @@ def plot_calibration_curve(probs: np.ndarray,
     
     ece = ECE(probs, labels, n_bins, mode)
 
+    ax_curve.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), linestyle=":", color='#9e9e9e')
     ax_curve.plot(prob_pred, prob_true,  linestyle='-', marker='o', label=f'ECE = {ece:.4f}')
-    ax_curve.plot(np.arange(0,1.1,0.1), np.arange(0,1.1,0.1), 'k--')
     ax_hist.hist(probs, bins=n_bins, edgecolor='k')
 
     ax_curve.set_title('Calibration Curve')
