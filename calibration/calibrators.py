@@ -53,7 +53,7 @@ class TemperatureScaling:
 
     Parameters
     ----------
-    temperature : the temperature value T to scale the logit, must be > 1
+    temperature : the temperature value T to scale the logit, must be > 0
 
     See Also
     -------
@@ -267,7 +267,8 @@ class HistogramBinning:
 
         n_bins : number of bins to discretize
         """
-        self.bins = np.linspace(0.0, 1.0, n_bins + 1)
+        quantiles = np.linspace(0, 1, n_bins + 1)
+        self.bins = np.percentile(probs, quantiles * 100)
         binids = np.searchsorted(self.bins[1:-1], probs)
 
         bin_true = np.bincount(binids, weights=labels, minlength=len(self.bins))
