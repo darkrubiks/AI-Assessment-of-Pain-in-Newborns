@@ -7,7 +7,7 @@ Date: 08/05/2023
 This file contains calibrators for classification models.
 """
 import numpy as np
-from scipy.optimize import fmin_bfgs
+from scipy.optimize import minimize
 from sklearn.isotonic import IsotonicRegression
 
 from calibration.metrics import negative_log_likelihood
@@ -87,7 +87,7 @@ class TemperatureScaling:
             return negative_log_likelihood(sigmoid(logits / T), labels)
 
         T = np.array([1.0])
-        result = fmin_bfgs(_objective, T, disp=False)
+        result = minimize(_objective, T, method='Nelder-Mead').x
 
         self.T = result[0]
 
@@ -203,17 +203,8 @@ class PlattScaling:
             P = 1 / (1 + np.exp((AB[0] * probs + AB[1])))
             return negative_log_likelihood(P, T)
 
-        def _grad(AB):
-            # gradient of the objective function
-            P = 1 / (1 + np.exp((AB[0] * probs + AB[1])))
-            TEP_minus_T1P = T - P
-
-            dA = np.dot(TEP_minus_T1P, probs)
-            dB = np.sum(TEP_minus_T1P)
-            return np.array([dA, dB])
-
         AB0 = np.array([0.0, np.log((N_minus + 1.0) / (N_plus + 1.0))])
-        result = fmin_bfgs(_objective, AB0, fprime=_grad, disp=False)
+        result = minimize(_objective, AB0, method='Nelder-Mead').x
 
         self.A = result[0]
         self.B = result[1]
