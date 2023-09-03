@@ -294,3 +294,24 @@ class HistogramBinning:
         calibrated_probs = self.prob_true[binids]
 
         return calibrated_probs
+
+
+class MCDropout:
+    def __init__(self, model, p) -> None:
+        self.model = model
+        self.p = p
+
+    def _enable_dropout(self):
+        for m in self.model.modules():
+            if m.__class__.__name__.startswith('Dropout'):
+                m.p = self.p
+                m.train()
+
+    def predict(self, x: np.ndarray, r) -> np.ndarray:
+        self._enable_dropout()
+        preds = np.zeros(r)
+
+        for i in range(r):
+            preds[i] = self.model.predict(x).detach().cpu().numpy()
+
+        return preds
