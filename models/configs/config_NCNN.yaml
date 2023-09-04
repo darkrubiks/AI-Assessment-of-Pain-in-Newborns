@@ -11,8 +11,8 @@ cache: True
 pin_memory: True
 num_workers: 0
 # Training Hyperparameters
-epochs: 50
-patience: 5
+epochs: 100
+patience: 10
 batch_size: 16
 soft_label: False
 label_smoothing: 0
