@@ -21,6 +21,7 @@ from utils.utils import create_folder, scale_coords
 
 # Constants
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
+CALIBRATION_FOLDER_PATH = os.path.join('Datasets', 'Calibration')
 N_FOLDS = len(os.listdir(FOLDS_FOLDER_PATH))
 AUGMENTED_IMAGES = 20
 AUGMENTED_SUFFIX = "_AUG_"
@@ -61,14 +62,14 @@ transform = A.Compose(
         ),
         A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
         A.HorizontalFlip(p=0.5),
-        A.Resize(height=512, width=512, interpolation=cv2.INTER_CUBIC, p=1.0),
     ],
     keypoint_params=A.KeypointParams(format="xy"),
 )
 
 resize = A.Compose(
     [
-        A.Resize(height=512, width=512, interpolation=cv2.INTER_CUBIC, p=1.0),
+        A.Resize(height=556, width=556, interpolation=cv2.INTER_CUBIC, p=1.0),
+        A.CenterCrop(height=512, width=512, p=1.0),
     ],
     keypoint_params=A.KeypointParams(format="xy"),
 )
@@ -77,6 +78,13 @@ resize = A.Compose(
 iCOPE_UNIFESP_data = pd.read_csv('iCOPE+UNIFESP_data.csv')
 iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].apply(lambda x: literal_eval(x))
 iCOPE_UNIFESP_data['landmarks_coordinates'] = iCOPE_UNIFESP_data['landmarks_coordinates'].apply(lambda x: literal_eval(x))
+
+# Apply to Calibration set only resizing
+create_folder(os.path.join(CALIBRATION_FOLDER_PATH, 'Landmarks'))
+print('Applying to Calibration Set')
+for file_name in tqdm(os.listdir(CALIBRATION_FOLDER_PATH)):
+    if file_name.endswith('.jpg'):
+        _ = resize_original_img(CALIBRATION_FOLDER_PATH, file_name)
 
 # For each Fold the images are augmented 20 times, verifying that the landmarks
 # are still in bounds of the new image
