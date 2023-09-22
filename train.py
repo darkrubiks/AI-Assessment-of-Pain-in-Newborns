@@ -278,10 +278,10 @@ if __name__=='__main__':
 
     config = load_config(args.config)
 
-    if config['soft_label'] and config['label_smoothing'] !=0:
-        print('Please dont use soft labels and label smoothing together!')
-        print('Aborting...')
-        exit(0)
+    #if config['soft_label'] and config['label_smoothing'] !=0:
+        #print('Please dont use soft labels and label smoothing together!')
+        #print('Aborting...')
+        #exit(0)
 
     if config['cache'] and config['num_workers'] > 0:
         print('Number of workers should be zero to use cache!')
