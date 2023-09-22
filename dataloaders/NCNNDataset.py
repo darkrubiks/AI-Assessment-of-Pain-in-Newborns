@@ -20,7 +20,9 @@ class NCNNDataset(BaseDataset):
     """
     transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize((120,120), antialias=False)
+            #transforms.RandomAffine(translate=[0,0], degrees=[30,30]),
+            transforms.Resize((120,120), antialias=False),
+            
         ])
 
     def __init__(self, 
