@@ -33,9 +33,12 @@ create_folder(CALIBRATION_FOLDER_PATH)
 # Read the data
 dataframe = pd.read_csv('iCOPE+UNIFESP_data.csv')
 
+# Remove entries without face detection
+dataframe = dataframe[dataframe['face_coordinates'] != "[]"]
+
 # Only keep pain and no pain labels
 dataframe = dataframe[(dataframe['class']=='pain') |
-                      (dataframe['class']=='no_pain')]
+                      (dataframe['class']=='nopain')]
 
 # Split the data into calibration and training/testing
 _, X_calib, _, y_calib = train_test_split(

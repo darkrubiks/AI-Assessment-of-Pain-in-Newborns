@@ -36,7 +36,7 @@ def resize_original_img(path, file_name):
     landmarks_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['landmarks_coordinates'].values[0]
 
     # Scale the landmarks to the cropped face
-    scaled_landmarks = [scale_coords(x, y, face_coords[0], face_coords[1]) for x, y in landmarks_coords]
+    scaled_landmarks = [scale_coords(x, y, face_coords) for x, y in landmarks_coords]
     resized = resize(image=img, keypoints=scaled_landmarks)
 
     # Save landmarks and resized image

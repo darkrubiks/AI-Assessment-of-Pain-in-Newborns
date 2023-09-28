@@ -19,7 +19,6 @@ from utils.utils import create_folder
 iCOPE_UNIFESP_data = pd.read_csv("iCOPE+UNIFESP_data.csv")
 UNIFESP_percep_data = pd.read_csv("UNIFESP_percep_heatmaps.csv")
 
-path_original_dataset = os.path.join("Datasets", "Originais")
 path_new_dataset = os.path.join("Datasets", "NewDataset")
 
 try:
@@ -34,12 +33,12 @@ create_folder(os.path.join(path_new_dataset, "Heatmaps"))
 
 print("Creating images directory...")
 for _, row in tqdm(iCOPE_UNIFESP_data.iterrows()):
-    src_file = os.path.join(path_original_dataset, row["dataset"], row["file_name"])
+    src_file = os.path.join(row["file_name"])
     dst_file = os.path.join(path_new_dataset, "Images", row["new_file_name"])
     copyfile(src_file, dst_file)
 
 print("Creating heatmaps directory...")
 for _, row in tqdm(UNIFESP_percep_data.iterrows()):
-    src_file = os.path.join(path_original_dataset, "PERCEP_HEATMAPS", row["heatmap_file_name"])
-    dst_file = os.path.join(path_new_dataset, "Heatmaps", row["new_file_name"])
+    src_file = os.path.join(row["heatmap_file_name"])
+    dst_file = os.path.join(path_new_dataset, "Heatmaps", row["new_percep_file_name"])
     copyfile(src_file, dst_file)

@@ -9,14 +9,15 @@ RetinaFace model from the Insgightface package. The faces are cropped and saved
 in a new folder. The facial coordinates are also saved on the .csv with all the
 images names and data.
 """
-import cv2
 import os
-import insightface
-import pandas as pd
-import numpy as np
 from shutil import rmtree
-from tqdm import tqdm
 
+import cv2
+import insightface
+import numpy as np
+import pandas as pd
+from insightface.app import FaceAnalysis
+from tqdm import tqdm
 
 dataset_path = os.path.join('Datasets','NewDataset','Images')
 dataset_faces_path = os.path.join('Datasets','DatasetFaces','Images')
@@ -33,8 +34,8 @@ except:
 os.makedirs(dataset_faces_path)
 
 # Instantiate RetinaFace model
-retinaface = insightface.model_zoo.get_model('retinaface_r50_v1')
-retinaface.prepare(ctx_id=-1) 
+retinaface = FaceAnalysis(allowed_modules=['detection'], providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+retinaface.prepare(ctx_id=0, det_size=(640, 640)) 
 
 face_coordinates = []
 landmark_coordinates = []
@@ -44,27 +45,33 @@ for _, row in tqdm(dataframe.iterrows()):
 
     img = cv2.imread(os.path.join(dataset_path, file_name))
 
-    bbox, landmarks = retinaface.detect(img, scale=0.5)
+    try:
+        faces = retinaface.get(img)[0]
 
-    # Convert to int, and remove the detection accuracy from bbox
-    bbox = np.array(bbox[0][:-1], 'int').tolist()
-    landmarks = np.array(landmarks[0], 'int').tolist()
+        # Convert to int, and remove the detection accuracy from bbox
+        bbox = faces['bbox'].astype('int')
+        bbox[bbox < 0] = 0
+        landmarks = faces['kps'].astype('int')
 
-    x = bbox[0]
-    y = bbox[1]
-    w = bbox[2] - x
-    h = bbox[3] - y
+        x1 = bbox[0]
+        y1 = bbox[1]
+        x2 = bbox[2]
+        y2 = bbox[3]
 
-    face = img[y:y+h,x:x+w]
+        face = img[y1:y2,x1:x2]
 
-    cv2.imwrite(os.path.join(dataset_faces_path, file_name), face)
+        cv2.imwrite(os.path.join(dataset_faces_path, file_name), face)
 
-    face_coordinates.append(bbox)
-    landmark_coordinates.append(landmarks)
+        face_coordinates.append(bbox.tolist())
+        landmark_coordinates.append(landmarks.tolist())
+
+    except IndexError:
+        print(f"No faces were detected on image {file_name}")
+        face_coordinates.append([])
+        landmark_coordinates.append([])
 
 # Assign the new columns to the dataframe and save the .csv
 dataframe['face_coordinates'] = face_coordinates
 dataframe['landmarks_coordinates'] = landmark_coordinates
 
 dataframe.to_csv('iCOPE+UNIFESP_data.csv', index=False)
-
