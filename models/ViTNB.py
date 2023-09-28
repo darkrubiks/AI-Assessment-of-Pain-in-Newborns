@@ -4,11 +4,9 @@ ViTNB.py
 Author: Leonardo Antunes Ferreira
 Date:22/09/2023
 
-
+This model implements the ViT_b_16 architecture pre-trained on IMAGENET.
+Only the classification head is trainable.
 """
-import os
-
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import vit_b_16
@@ -23,7 +21,8 @@ class ViTNB(nn.Module):
         for param in self.ViT.parameters():
             param.requires_grad  = False
 
-        in_features = self.ViT.heads.head.in_features  # Get the number of input features for the classification head
+        # Get the number of input features for the classification head
+        in_features = self.ViT.heads.head.in_features  
         self.ViT.heads.head = nn.Linear(in_features, 1)
 
     def forward(self, x):

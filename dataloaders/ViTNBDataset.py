@@ -8,7 +8,7 @@ from dataloaders.BaseDataset import BaseDataset
 class ViTNBDataset(BaseDataset):
     """
     Load the images with its respective labels. The images are normalized
-    to VGGFace format.
+    to IMAGENET format.
 
     Parameters
     ----------
@@ -33,10 +33,10 @@ class ViTNBDataset(BaseDataset):
         super().__init__(path, soft, cache)
 
     def load_image(self, idx):
-        image = cv2.imread(self.img_names[idx]) # Load BGR image to VGGFace 
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Load RGB for NCNN
+        image = cv2.imread(self.img_names[idx])
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # Load RGB for ViT
         image = image/255 # Normalize to [0-1]
         image = np.float32(image)
-        image = self.transform(image) # Apply Normalization based on VGGFace
+        image = self.transform(image) # Apply Normalization based on IMAGENET
 
         return image
