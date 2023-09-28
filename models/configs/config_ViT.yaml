@@ -1,0 +1,30 @@
+# config_ViT.yaml
+
+# Model to be trained
+model: ViTNB
+# Dataset path
+path_train: 'Datasets\Folds\1\Train'
+path_test: 'Datasets\Folds\1\Test'
+# Device configuration
+device: 'cuda'
+cache: True
+pin_memory: True
+num_workers: 0
+# Training Hyperparameters
+epochs: 100
+patience: 10
+batch_size: 16
+soft_label: False
+label_smoothing: 0
+optimizer: RMSprop
+optimizer_hyp:
+  lr: 1.0e-04
+  weight_decay: 1.0e-05
+
+
+
+
+
+
+
+
