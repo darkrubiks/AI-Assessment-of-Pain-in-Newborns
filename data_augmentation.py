@@ -33,17 +33,17 @@ def resize_original_img(path, file_name):
 
     # Get correspondent Face and Landmarks coordinates
     face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
-    landmarks_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['landmarks_coordinates'].values[0]
+    keypoints_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['keypoints_coordinates'].values[0]
 
     # Scale the landmarks to the cropped face
-    scaled_landmarks = [scale_coords(x, y, face_coords) for x, y in landmarks_coords]
+    scaled_landmarks = [scale_coords(x, y, face_coords) for x, y in keypoints_coords]
     resized = resize(image=img, keypoints=scaled_landmarks)
 
     # Save landmarks and resized image
     cv2.imwrite(os.path.join(path, file_name), resized['image'])
-    landmarks_file = open(os.path.join(path, 'Landmarks', file_name.split('.jpg')[0]), 'wb')
-    pickle.dump(resized['keypoints'], landmarks_file)
-    landmarks_file.close()
+
+    with open(os.path.join(path, 'Keypoints', file_name.split('.jpg')[0] + ".pkl"), 'wb') as f:
+        pickle.dump(resized['keypoints'], f)
 
     return img, scaled_landmarks
 
@@ -77,16 +77,16 @@ resize = A.Compose(
 # Read the data from the .csv
 iCOPE_UNIFESP_data = pd.read_csv('iCOPE+UNIFESP_data.csv')
 iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].apply(lambda x: literal_eval(x))
-iCOPE_UNIFESP_data['landmarks_coordinates'] = iCOPE_UNIFESP_data['landmarks_coordinates'].apply(lambda x: literal_eval(x))
+iCOPE_UNIFESP_data['keypoints_coordinates'] = iCOPE_UNIFESP_data['keypoints_coordinates'].apply(lambda x: literal_eval(x))
 
 # Apply to Calibration set only resizing
-create_folder(os.path.join(CALIBRATION_FOLDER_PATH, 'Landmarks'))
+create_folder(os.path.join(CALIBRATION_FOLDER_PATH, 'Keypoints'))
 print('Applying to Calibration Set')
 for file_name in tqdm(os.listdir(CALIBRATION_FOLDER_PATH)):
     if file_name.endswith('.jpg'):
         _ = resize_original_img(CALIBRATION_FOLDER_PATH, file_name)
 
-# For each Fold the images are augmented 20 times, verifying that the landmarks
+# For each Fold the images are augmented 20 times, verifying that the Keypoints
 # are still in bounds of the new image
 for fold in range(N_FOLDS):
     print(f'\nAugmenting Fold: {fold:02}')
@@ -95,8 +95,8 @@ for fold in range(N_FOLDS):
 
     train_fold_path = os.path.join(FOLDS_FOLDER_PATH , fold, 'Train')
     test_fold_path = os.path.join(FOLDS_FOLDER_PATH , fold, 'Test')
-    create_folder(os.path.join(train_fold_path, 'Landmarks'))
-    create_folder(os.path.join(test_fold_path, 'Landmarks'))
+    create_folder(os.path.join(train_fold_path, 'Keypoints'))
+    create_folder(os.path.join(test_fold_path, 'Keypoints'))
 
     print('Applying to Test Set')
     for file_name in tqdm(os.listdir(test_fold_path)):
@@ -111,7 +111,7 @@ for fold in range(N_FOLDS):
             for i in range(AUGMENTED_IMAGES):
                 transformed = transform(image=img, keypoints=scaled_landmarks)
 
-                # Keep generating images until all landmarks are present
+                # Keep generating images until all Keypoints are present
                 while len(transformed['keypoints']) < 5:
                     transformed = transform(image=img, keypoints=scaled_landmarks)
 
@@ -119,7 +119,7 @@ for fold in range(N_FOLDS):
                 aug_file_name = f'{i:02}{AUGMENTED_SUFFIX}{file_name}'
                 cv2.imwrite(os.path.join(train_fold_path, aug_file_name), transformed['image'])
 
-                # Save landmarks
-                aug_landmarks_file = os.path.join(train_fold_path, 'Landmarks', aug_file_name.split('.jpg')[0])
+                # Save Keypoints
+                aug_landmarks_file = os.path.join(train_fold_path, 'Keypoints', aug_file_name.split('.jpg')[0] + ".pkl")
                 with open(aug_landmarks_file, 'wb') as f:
                     pickle.dump(transformed['keypoints'], f)
