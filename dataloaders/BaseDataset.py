@@ -66,7 +66,7 @@ class BaseDataset(Dataset):
             if classe == 'pain' and NFCS < 3:
                 NFCS = 5
 
-            elif classe == 'no_pain' and NFCS >= 3:
+            elif classe == 'nopain' and NFCS >= 3:
                 NFCS = 0
            
             #S_x = 1 / (1 + np.exp(-NFCS + 2.5)) #sigmoid
