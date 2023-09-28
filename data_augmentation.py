@@ -31,15 +31,15 @@ def resize_original_img(path, file_name):
     # Read image
     img = cv2.imread(os.path.join(path, file_name))
 
-    # Get correspondent Face and Landmarks coordinates
+    # Get correspondent Face and keypoints coordinates
     face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
     keypoints_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['keypoints_coordinates'].values[0]
 
-    # Scale the landmarks to the cropped face
-    scaled_landmarks = [scale_coords(x, y, face_coords) for x, y in keypoints_coords]
-    resized = resize(image=img, keypoints=scaled_landmarks)
+    # Scale the keypoints to the cropped face
+    scaled_keypoints = [scale_coords(x, y, face_coords) for x, y in keypoints_coords]
+    resized = resize(image=img, keypoints=scaled_keypoints)
 
-    # Save landmarks and resized image
+    # Save keypoints and resized image
     cv2.imwrite(os.path.join(path, file_name), resized['image'])
 
     with open(os.path.join(path, 'Keypoints', file_name.split('.jpg')[0] + ".pkl"), 'wb') as f:
