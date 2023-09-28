@@ -37,13 +37,13 @@ def scale_coords(x: int,
     x2 = face_bbox[2]
     y2 = face_bbox[3]
 
-    x = x2-1 if x > x2 else x
-    y = y2-1 if y > y2 else y
+    x = x - x1
+    y = y - y1
 
-    scaled_x = x - x1
-    scaled_y = y - y1
+    x = min(max(x, 0), x2-x1-5)
+    y = min(max(y, 0), y2-y1-5)
 
-    return scaled_x, scaled_y
+    return int(x), int(y)
 
 
 def load_config(config_file: str) -> dict:
