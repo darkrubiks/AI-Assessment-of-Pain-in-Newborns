@@ -1,0 +1,1 @@
+from corruption.corruption import *
