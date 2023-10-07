@@ -131,7 +131,7 @@ def translate(img: np.ndarray, factor: float = 0.5, axis: str = "x") -> np.ndarr
     return transform(image=img)["image"]
 
 
-def patches(img: np.ndarray, coordinates: np.ndarray, width: int, height: int) -> np.ndarray:
+def patches(img: np.ndarray, coordinates: np.ndarray, width: int = 100, height: int = 100) -> np.ndarray:
     """
     Apply patches to the image cutting out information. The patches are filled with the image
     mean pixel value. The patch is applied based on coordinates.
