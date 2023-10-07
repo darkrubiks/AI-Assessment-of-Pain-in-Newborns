@@ -9,6 +9,7 @@ def brightness(img: np.ndarray, factor: float = 1.5) -> np.ndarray:
     Parameters
     ----------
     img : the source image to alter
+    
     factor : values between 0 and 1 will decrease the brightness, whereas
     values above 1 will increase the brightness
 
@@ -35,6 +36,7 @@ def downscale(img: np.ndarray, factor: float = 0.25) -> np.ndarray:
     Parameters
     ----------
     img : the source image to alter
+
     factor : values must be between 0 and 1, low values will make the altered image
     more pixelated
 
@@ -58,6 +60,7 @@ def motion_blur(img: np.ndarray, factor: float = 13) -> np.ndarray:
     Parameters
     ----------
     img : the source image to alter
+
     factor : the kernel size to use, needs to be greater than 3 and an odd number
 
     Returns
@@ -80,6 +83,7 @@ def rotation(img: np.ndarray, factor: float = 20) -> np.ndarray:
     Parameters
     ----------
     img : the source image to alter
+
     factor : the angle in degrees to rotate the image. Negative values will rotate
     in clockwise direction
 
@@ -104,7 +108,9 @@ def translate(img: np.ndarray, factor: float = 0.5, axis: str = "x") -> np.ndarr
     Parameters
     ----------
     img : the source image to alter
+
     factor : the percent of pixels to translate, negative values will move the pixels to the left
+
     axis : the axis to perform the translation
 
     Returns
@@ -134,7 +140,9 @@ def patches(img: np.ndarray, coordinates: np.ndarray, width: int, height: int) -
     ----------
     img : the source image to alter
     coordinates : a list containing the coordinates [x,y] to apply the patches
+
     width : the width of the patches
+
     height : the height of the patches
 
     Returns
