@@ -28,15 +28,22 @@ def vis_keypoints(image: np.ndarray,
 
 def scale_coords(x: int, 
                  y: int, 
-                 x_new_origin: int, 
-                 y_new_origin: int) -> Tuple[int, int]:
+                 face_bbox: List[int]) -> Tuple[int, int]:
     """
     Scale coordinates based on a new origin.
     """
-    scaled_x = x - x_new_origin
-    scaled_y = y - y_new_origin
+    x1 = face_bbox[0]
+    y1 = face_bbox[1]
+    x2 = face_bbox[2]
+    y2 = face_bbox[3]
 
-    return scaled_x, scaled_y
+    x = x - x1
+    y = y - y1
+
+    x = min(max(x, 0), x2-x1-5)
+    y = min(max(y, 0), y2-y1-5)
+
+    return int(x), int(y)
 
 
 def load_config(config_file: str) -> dict:

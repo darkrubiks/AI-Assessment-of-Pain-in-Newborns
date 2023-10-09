@@ -101,7 +101,8 @@ class IntegratedGradients:
         
         attribution = (image - baseline) * integrated_gradients
 
-        heatmap = torch.abs(attribution.sum(dim=0))
+        heatmap = torch.clamp(attribution.sum(dim=0), 0)
+        heatmap = heatmap / (torch.max(heatmap) + 1e-7)
         heatmap = heatmap.detach().cpu().numpy().squeeze()
 
         return heatmap

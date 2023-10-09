@@ -1,10 +1,10 @@
-# config_VGGNB.yaml
+# config_ViT.yaml
 
 # Model to be trained
-model: VGGNB
+model: ViTNB
 # Dataset path
-path_train: 'Datasets\Folds\0\Train'
-path_test: 'Datasets\Folds\0\Test'
+path_train: 'Datasets\Folds\1\Train'
+path_test: 'Datasets\Folds\1\Test'
 # Device configuration
 device: 'cuda'
 cache: True
@@ -18,7 +18,7 @@ soft_label: False
 label_smoothing: 0
 optimizer: RMSprop
 optimizer_hyp:
-  lr: 1.0e-05
+  lr: 1.0e-04
   weight_decay: 1.0e-05
 
 
