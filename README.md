@@ -95,6 +95,8 @@ python train.py --config models\configs\config_NCNN.yaml
 
 ## **Publications**
 
+* Ferreira, Leonardo A., et al. "Revisiting N-CNN for Clinical Practice." International Workshop on PRedictive Intelligence In MEdicine. Cham: Springer Nature Switzerland, 2023.
+
 * Coutrin, Gabriel AS et al. "Convolutional neural networks for newborn pain assessment using face images: A quantitative and qualitative comparison." Proceedings of the 3rd International Conference on Medical Imaging and Computer-Aided Diagnosis, MICAD 2022. Springer LNEE, 2022.
 
 * Carlini, Lucas P., et al. "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal Pain Assessment." 2021 34th SIBGRAPI Conference on Graphics, Patterns and Images (SIBGRAPI). IEEE, 2021.
