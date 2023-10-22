@@ -62,7 +62,11 @@ def attribution_mask_processing(attribution_mask: np.ndarray,
 
     # Apply Gaussian Blur
     result = cv2.GaussianBlur(result,(ksize,ksize), sigma)
-    result = result / (np.max(result) + 1e-7)
+
+    # Normalization 0 - 1
+    result_max = np.max(result)
+    result_min = np.min(result)
+    result = (result - result_min) / (result_max - result_min)
 
     # Creates the alpha channel
     alpha_channel = np.ones(np.squeeze(result).shape, dtype=result.dtype)
