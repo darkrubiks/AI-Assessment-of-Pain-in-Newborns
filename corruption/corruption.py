@@ -93,7 +93,7 @@ def rotation(img: np.ndarray, factor: float = 20) -> np.ndarray:
     transform = A.Affine(
         rotate=[factor, factor], 
         always_apply=True, 
-        cval=[int(img.mean())] * 3
+        cval=[0] * 3
     )
 
     return transform(image=img)["image"]
@@ -124,7 +124,7 @@ def translate(img: np.ndarray, factor: float = 0.5, axis: str = "x") -> np.ndarr
     transform = A.Affine(
         translate_percent=translate_percent,
         always_apply=True,
-        cval=[int(img.mean())] * 3,
+        cval=[0] * 3,
     )
 
     return transform(image=img)["image"]
@@ -156,6 +156,6 @@ def patches(img: np.ndarray, coordinates: np.ndarray, width: int = 100, height: 
         x2 = np.clip(x + width  // 2, 0, img.shape[1])
         y2 = np.clip(y + height // 2, 0, img.shape[0])
 
-        img[y1:y2, x1:x2] = int(img.mean())
+        img[y1:y2, x1:x2] = 0
 
     return img
