@@ -53,9 +53,9 @@ def downscale(img: np.ndarray, factor: float = 0.25) -> np.ndarray:
     return transform(image=img)["image"]
 
 
-def motion_blur(img: np.ndarray, factor: float = 13) -> np.ndarray:
+def blur(img: np.ndarray, factor: float = 13) -> np.ndarray:
     """
-    Simulates motion blur on the image.
+    Blur the image.
 
     Parameters
     ----------
@@ -67,9 +67,8 @@ def motion_blur(img: np.ndarray, factor: float = 13) -> np.ndarray:
     -------
     the altered image
     """
-    transform = A.MotionBlur(
-        blur_limit=[factor, factor], 
-        allow_shifted=True, 
+    transform = A.Blur(
+       blur_limit=[factor, factor],
         always_apply=True
     )
 
