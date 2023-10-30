@@ -45,7 +45,7 @@ def resize_original_img(path, file_name):
     with open(os.path.join(path, 'Keypoints', file_name.split('.jpg')[0] + ".pkl"), 'wb') as f:
         pickle.dump(resized['keypoints'], f)
 
-    return img, scaled_landmarks
+    return resized['image'], resized['keypoints']
 
 # Augmentation Pipeline, Affine transformation is always applied, the Horizontal
 # Flip and RandomBrightnessContrast are applied with a 50% chance. All images and
@@ -106,14 +106,14 @@ for fold in range(N_FOLDS):
     print('Applying to Train Set')
     for file_name in tqdm(os.listdir(train_fold_path)):
         if file_name.endswith('.jpg'):
-            img, scaled_landmarks = resize_original_img(train_fold_path, file_name)
+            img, scaled_keypoints = resize_original_img(train_fold_path, file_name)
 
             for i in range(AUGMENTED_IMAGES):
-                transformed = transform(image=img, keypoints=scaled_landmarks)
+                transformed = transform(image=img, keypoints=scaled_keypoints)
 
                 # Keep generating images until all Keypoints are present
                 while len(transformed['keypoints']) < 5:
-                    transformed = transform(image=img, keypoints=scaled_landmarks)
+                    transformed = transform(image=img, keypoints=scaled_keypoints)
 
                 # Save image
                 aug_file_name = f'{i:02}{AUGMENTED_SUFFIX}{file_name}'

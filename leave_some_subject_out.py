@@ -40,6 +40,10 @@ dataframe = dataframe[dataframe['face_coordinates'] != "[]"]
 dataframe = dataframe[(dataframe['class']=='pain') |
                       (dataframe['class']=='nopain')]
 
+# Only keep selected datasets
+dataframe = dataframe[(dataframe['dataset']=='iCOPE') |
+                      (dataframe['dataset']=='UNIFESP')]
+
 # Split the data into calibration and training/testing
 _, X_calib, _, y_calib = train_test_split(
     dataframe["new_file_name"],
