@@ -68,8 +68,7 @@ transform = A.Compose(
 
 resize = A.Compose(
     [
-        A.Resize(height=556, width=556, interpolation=cv2.INTER_CUBIC, p=1.0),
-        A.CenterCrop(height=512, width=512, p=1.0),
+        A.Resize(height=512, width=512, interpolation=cv2.INTER_CUBIC, p=1.0),
     ],
     keypoint_params=A.KeypointParams(format="xy"),
 )
