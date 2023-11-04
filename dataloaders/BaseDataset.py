@@ -72,19 +72,19 @@ class BaseDataset(Dataset):
             #S_x = 1 / (1 + np.exp(-NFCS + 2.5)) #sigmoid
             #S_x = 0.2 * NFCS #linear
 
-            #if NFCS <= 1:
-            #    label = torch.tensor(0.0)
-            #elif 2 <= NFCS < 3:
-            #    label = torch.tensor(0.4)
-            #elif 3 <= NFCS < 4:
-            #    label = torch.tensor(0.6)
-            #elif NFCS >= 4:
-            #    label = torch.tensor(1.0)
+            if NFCS <= 1:
+                label = torch.tensor(0.0)
+            elif 2 <= NFCS < 3:
+                label = torch.tensor(0.3)
+            elif 3 <= NFCS < 4:
+                label = torch.tensor(0.7)
+            elif NFCS >= 4:
+                label = torch.tensor(1.0)
 
             #label = torch.tensor(S_x)
             
 
-            label = 1 if classe == 'pain' else 0
+            #label = 1 if classe == 'pain' else 0
             print(label)
         else:
             # Label encoding
