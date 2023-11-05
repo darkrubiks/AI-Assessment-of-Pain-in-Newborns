@@ -28,8 +28,9 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict) -> dict:
 
     Returns
     -------
-    normalized_scores : a dictionary containing the given region 
-    names with its respective normalized score summing up to 1
+    sorted_dict : a dictionary containing the given region 
+    names with its respective normalized score summing up to 1 sorted
+    by descending order of importance
     """
     region_scores = {}
     # For each region calculates the average pixel value, regions
@@ -46,7 +47,10 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict) -> dict:
         normalized_score = score / total_score
         normalized_scores[region] = normalized_score
 
-    return normalized_scores
+    # Sort the dictionary by values in ascending order
+    sorted_dict = dict(sorted(normalized_scores.items(), key=lambda item: item[1], reverse=True))
+
+    return sorted_dict
 
 
 def create_face_regions_masks(keypoints: np.ndarray) -> dict:
@@ -84,6 +88,9 @@ def create_face_regions_masks(keypoints: np.ndarray) -> dict:
 
     mouth = keypoints[[52, 64, 63, 67, 68, 61,
                        58, 59, 53, 56, 55]].astype(np.int32)
+    
+    chin = keypoints[[5, 6, 7, 8, 0, 24, 23, 22, 21,
+                      58, 59, 53, 56, 55]].astype(np.int32)
 
     right_nasolabial_fold = keypoints[[ 5, 4, 3, 77, 78, 79, 52]].astype(np.int32)
     left_nasolabial_fold = keypoints[[20, 21, 22, 61, 85, 84, 83]].astype(np.int32)
@@ -104,8 +111,9 @@ def create_face_regions_masks(keypoints: np.ndarray) -> dict:
 
     regions = {"right_eyebrown": right_eyebrown, "left_eyebrown": left_eyebrown,
                "right_eye": right_eye, "left_eye": left_eye, "nose": nose, "between_eyes": between_eyes,
-               "mouth": mouth, "right_nasolabial_fold": right_nasolabial_fold, "left_nasolabial_fold": left_nasolabial_fold,
-               "right_cheek": right_cheek, "left_cheek": left_cheek, "forehead": forehead, "outside":outside}
+               "mouth": mouth, "chin": chin, "right_nasolabial_fold": right_nasolabial_fold, 
+               "left_nasolabial_fold": left_nasolabial_fold, "right_cheek": right_cheek, 
+               "left_cheek": left_cheek, "forehead": forehead, "outside": outside}
 
     region_masks = dict()
     for region_name, region_points in regions.items():
