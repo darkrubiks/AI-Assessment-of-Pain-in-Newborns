@@ -132,12 +132,13 @@ def translate(img: np.ndarray, factor: float = 0.5, axis: str = "x") -> np.ndarr
 
 def patches(img: np.ndarray, coordinates: np.ndarray, width: int = 100, height: int = 100) -> np.ndarray:
     """
-    Apply patches to the image cutting out information. The patches are filled with the image
-    mean pixel value. The patch is applied based on coordinates.
+    Apply patches to the image cutting out information. The patch is applied based on coordinates and filled
+    with black pixels.
 
     Parameters
     ----------
     img : the source image to alter
+
     coordinates : a list containing the coordinates [x,y] to apply the patches
 
     width : the width of the patches
@@ -158,4 +159,26 @@ def patches(img: np.ndarray, coordinates: np.ndarray, width: int = 100, height: 
 
         img[y1:y2, x1:x2] = 0
 
+    return img
+
+def region_patches(img: np.ndarray, mask_regions: np.ndarray) -> np.ndarray:
+    """
+    Apply patches to the image cutting out information. The patch is applied based on a binary mask provided
+    by the user. The cutout information is filled with black pixels.
+
+    Parameters
+    ----------
+    img : the source image to alter
+
+    mask_regions : a list containing the binary masks to use
+
+    Returns
+    -------
+    the altered image
+    """
+    img = img.copy()
+
+    for mask in mask_regions:
+        img[np.where(mask == 1)] = 0
+    
     return img
