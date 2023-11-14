@@ -92,11 +92,11 @@ def create_face_regions_masks(keypoints: np.ndarray) -> dict:
     chin = keypoints[[5, 6, 7, 8, 0, 24, 23, 22, 21,
                       58, 59, 53, 56, 55]].astype(np.int32)
 
-    right_nasolabial_fold = keypoints[[ 5, 4, 3, 77, 78, 79, 52]].astype(np.int32)
-    left_nasolabial_fold = keypoints[[20, 21, 22, 61, 85, 84, 83]].astype(np.int32)
+    right_nasolabial_fold = keypoints[[5, 4, 3, 77, 78, 79, 64, 52, 55]].astype(np.int32)
+    left_nasolabial_fold = keypoints[[19, 20, 21, 58, 61, 68, 85, 84, 83]].astype(np.int32)
 
-    right_cheek = keypoints[[30, 31, 32, 18, 19, 20, 83, 82]].astype(np.int32)
-    left_cheek = keypoints[[14, 15, 16, 2, 3, 77, 76]].astype(np.int32)
+    right_cheek = keypoints[[29, 30, 31, 32, 18, 19, 83, 82]].astype(np.int32)
+    left_cheek = keypoints[[13, 14, 15, 16, 2, 3, 77, 76]].astype(np.int32)
 
     forehead_left = 2 * keypoints[1] - keypoints[[1, 9, 10, 11, 12, 13]]
     forehead_right = 2 * keypoints[17] - keypoints[[29, 28, 27, 26, 25, 17]]
