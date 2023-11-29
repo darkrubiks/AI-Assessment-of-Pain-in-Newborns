@@ -300,7 +300,7 @@ def probability_histogram(probs: np.ndarray,
         ax_hist.text(
             x=probs.mean() - 0.02, 
             y=y_max + 15, 
-            s=f'${label}_{{Avg}}$={probs.mean():.2f}', 
+            s=f'${label}$={probs.mean():.2f}', 
             verticalalignment='center', 
             rotation='vertical'
         )
@@ -349,6 +349,5 @@ def probability_histogram(probs: np.ndarray,
         dpi=300, 
         bbox_inches='tight'
     )
-
     plt.show()
     plt.close()
