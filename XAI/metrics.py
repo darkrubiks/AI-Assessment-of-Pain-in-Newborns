@@ -10,7 +10,7 @@ import numpy as np
 import cv2
 
 
-def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict) -> dict:
+def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=False) -> dict:
     """
     This function is responsible for calculating a XAI score which 
     will return the percentage of important pixels in each facial 
@@ -48,9 +48,11 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict) -> dict:
         normalized_scores[region] = normalized_score
 
     # Sort the dictionary by values in ascending order
-    sorted_dict = dict(sorted(normalized_scores.items(), key=lambda item: item[1], reverse=True))
-
-    return sorted_dict
+    if sort:
+        sorted_dict = dict(sorted(normalized_scores.items(), key=lambda item: item[1], reverse=True))
+        return sorted_dict
+    else:
+        return normalized_scores
 
 
 def create_face_regions_masks(keypoints: np.ndarray) -> dict:
