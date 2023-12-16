@@ -95,6 +95,8 @@ python train.py --config models\configs\config_NCNN.yaml
 
 ## **Publications**
 
+* Carlini, Lucas P., et al. "Human vs machine towards neonatal pain assessment: A comprehensive analysis of the facial features extracted by health professionals, parents, and convolutional neural networks." Artificial Intelligence in Medicine, 2023.
+
 * Ferreira, Leonardo A., et al. "Revisiting N-CNN for Clinical Practice." International Workshop on PRedictive Intelligence In MEdicine. Cham: Springer Nature Switzerland, 2023.
 
 * Coutrin, Gabriel AS et al. "Convolutional neural networks for newborn pain assessment using face images: A quantitative and qualitative comparison." Proceedings of the 3rd International Conference on Medical Imaging and Computer-Aided Diagnosis, MICAD 2022. Springer LNEE, 2022.
