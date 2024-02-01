@@ -340,7 +340,7 @@ def probability_histogram(probs: np.ndarray,
     ax_hist.set_ylabel('Quantidade')
     ax_hist.legend(loc='upper right')
 
-    ax_curve.set_xlabel('Probabilidade Prevista')
+    ax_curve.set_xlabel('Probabilidade Prevista Média')
     ax_curve.set_ylabel('Proporção \%')
     ax_curve.legend(loc='upper right')
 
