@@ -14,7 +14,9 @@ from calibration.metrics import ECE, MCE, brier_score, negative_log_likelihood
 from utils.plots import *
 
 
-def validation_metrics(preds: np.ndarray, labels: np.ndarray) -> dict:
+def validation_metrics(preds: np.ndarray, 
+                       probs: np.ndarray,
+                       labels: np.ndarray) -> dict:
     """
     Returns a dictionary with the following metrics: Accuracy,
     F1 Score, Precision, Recall.
@@ -22,6 +24,8 @@ def validation_metrics(preds: np.ndarray, labels: np.ndarray) -> dict:
     Parameters
     ----------
     preds : the predicted class for each sample
+
+    probs : the probability of the prediction
 
     labels : the original labels for each sample
 
@@ -37,7 +41,7 @@ def validation_metrics(preds: np.ndarray, labels: np.ndarray) -> dict:
     specificity = tn / (fp + tn)
     f1 = (2 * tp) / (2 * tp + fp + fn)
 
-    auc = roc_auc_score(labels, preds)
+    auc = roc_auc_score(labels, probs)
 
     metrics = {
         "Accuracy": accuracy,

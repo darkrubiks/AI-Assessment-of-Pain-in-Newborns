@@ -104,7 +104,7 @@ def train(model, dataloader, optimizer, config):
 
         # Only update after 20 batches
         if i % 20 == 0:
-            metrics = validation_metrics(preds_list.cpu().numpy(), labels_list.cpu().numpy())
+            metrics = validation_metrics(preds_list.cpu().numpy(), probs_list.cpu().numpy(), labels_list.cpu().numpy())
             metrics.update(calibration_metrics(probs_list.cpu().numpy(), labels_list.cpu().numpy()))
             metrics.update({'Loss': running_loss/i})
             # Update progress bar
@@ -140,7 +140,7 @@ def test(model, dataloader, config):
             probs_list = torch.cat([probs_list, probs])
             labels_list = torch.cat([labels_list, labels])
 
-            metrics = validation_metrics(preds_list.cpu().numpy(), labels_list.cpu().numpy())
+            metrics = validation_metrics(preds_list.cpu().numpy(), probs_list.cpu().numpy(), labels_list.cpu().numpy())
             metrics.update(calibration_metrics(probs_list.cpu().numpy(), labels_list.cpu().numpy()))
             metrics.update({'Loss': running_loss/i})
 
