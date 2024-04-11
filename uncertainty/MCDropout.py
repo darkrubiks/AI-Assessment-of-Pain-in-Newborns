@@ -34,7 +34,7 @@ class MCDropout:
                 m.p = self.p
                 m.train()
 
-    def predict(self, x: torch.tensor, reps: int=10) -> np.ndarray:
+    def predict(self, x: torch.tensor, reps: int=10) -> torch.tensor:
         """
         The predict method will auto enable the dropout layers of the model,
         returning all the predictions made for the given repetition value.
@@ -47,12 +47,14 @@ class MCDropout:
 
         Returns
         ----------
-        All predictions scores in a numpy array
+        All predictions scores in a torch tensor
         """
         self._enable_dropout()
-        preds = np.zeros(reps)
+        predictions = torch.zeros(x.size(0), reps, dtype=torch.float, device=x.device)
 
         for i in range(reps):
-            preds[i] = self.model.predict(x).detach().cpu().numpy()
+            with torch.no_grad():
+                output = self.model.predict(x)
+            predictions[:, i] = output.squeeze()  # Assuming output is a single value per sample
 
-        return preds
+        return predictions
