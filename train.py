@@ -92,11 +92,11 @@ def train(model, dataloader, optimizer, config):
 
         # Only when using soft labels
         if config['soft_label']:
-            labels = torch.gt(labels, 0.5).type(torch.int)
+            labels = torch.ge(labels, 0.5).type(torch.int)
 
         # Statistics
         probs = F.sigmoid(outputs).detach()
-        preds = torch.gt(probs, 0.5).type(torch.int)
+        preds = torch.ge(probs, 0.5).type(torch.int)
         running_loss += loss.item()
         preds_list = torch.cat([preds_list, preds])
         probs_list = torch.cat([probs_list, probs])
@@ -134,7 +134,7 @@ def test(model, dataloader, config):
 
             # Statistics
             probs = F.sigmoid(outputs).detach()
-            preds = torch.gt(probs, 0.5).type(torch.int)
+            preds = torch.ge(probs, 0.5).type(torch.int)
             running_loss += loss.item()
             preds_list = torch.cat([preds_list, preds])
             probs_list = torch.cat([probs_list, probs])
@@ -253,7 +253,7 @@ def main(config):
             outputs = model(inputs)
             # Statistics
             probs = F.sigmoid(outputs)
-            preds = torch.gt(probs, 0.5).type(torch.int)
+            preds = torch.ge(probs, 0.5).type(torch.int)
             
             preds_list = torch.cat([preds_list, preds])
             labels_list = torch.cat([labels_list, labels])
