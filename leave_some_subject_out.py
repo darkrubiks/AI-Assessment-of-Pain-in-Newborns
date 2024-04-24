@@ -10,8 +10,8 @@ from utils.utils import create_folder
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
 DATASETS_FOLDER_PATH = os.path.join('Datasets', 'DatasetFaces')
 CALIBRATION_FOLDER_PATH = os.path.join('Datasets', 'Calibration')
-CALIBRATION_SIZE = 0.2
-N_FOLDS = 5
+CALIBRATION_SIZE = 0.0
+N_FOLDS = 10
 
 def copy_files(src_files, dst_folder):
     """
@@ -44,20 +44,21 @@ dataframe = dataframe[(dataframe['class']=='pain') |
 dataframe = dataframe[(dataframe['dataset']=='iCOPE') |
                       (dataframe['dataset']=='UNIFESP')]
 
-# Split the data into calibration and training/testing
-_, X_calib, _, y_calib = train_test_split(
-    dataframe["new_file_name"],
-    dataframe["class"],
-    test_size=CALIBRATION_SIZE,
-    random_state=42,
-    stratify=dataframe["class"]
-)
+if CALIBRATION_SIZE > 0:
+    # Split the data into calibration and training/testing
+    _, X_calib, _, y_calib = train_test_split(
+        dataframe["new_file_name"],
+        dataframe["class"],
+        test_size=CALIBRATION_SIZE,
+        random_state=42,
+        stratify=dataframe["class"]
+    )
 
-# Copy the calibration images to a separate folder
-copy_files(X_calib, CALIBRATION_FOLDER_PATH)
+    # Copy the calibration images to a separate folder
+    copy_files(X_calib, CALIBRATION_FOLDER_PATH)
 
-# Drop the calibration images from the training/testing data
-dataframe = dataframe.drop(y_calib.index)
+    # Drop the calibration images from the training/testing data
+    dataframe = dataframe.drop(y_calib.index)
 
 # Gather unique subjects
 unique_subjects = list(set(dataframe['new_subject']))
