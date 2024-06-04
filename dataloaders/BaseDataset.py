@@ -16,13 +16,13 @@ class BaseDataset(Dataset):
     ----------
     path : the directory where the images are located
 
-    soft : load labels as soft labels using the NFCS score
+    soft : load labels as soft labels using the NFCS score [sigmoid, step, or linear]
     
     cache : if True it will cache all images in RAM for faster training
     """
     def __init__(self, 
                 path: str,
-                soft: bool=False,
+                soft: str='None',
                 cache: bool=False) -> None:
         self.path = path
         self.cache = cache
@@ -59,15 +59,31 @@ class BaseDataset(Dataset):
         dataframe_result = self.dataframe[self.dataframe['new_file_name']==new_file_name]
         classe = dataframe_result['class'].values[0]
 
-        if self.soft:
-            # Transform the NFCS into a soft label using the sigmoid function
-            NFCS = dataframe_result['NFCS'].values[0]
-            S_x = 1 / (1 + np.exp(-NFCS + 2.5))
+        # Get NFCS score
+        NFCS = dataframe_result['NFCS'].values[0]
+
+        # Soft-Label methods
+        if self.soft == "sigmoid":
+            S_x = 1 / (1 + np.exp(-NFCS + 2.5)) 
             label = torch.tensor(S_x)
+
+        elif self.soft == "linear":
+            S_x = 0.2 * NFCS 
+            label = torch.tensor(S_x)
+
+        elif self.soft == "step":
+            if NFCS <= 1:
+                label = torch.tensor(0.0)
+            elif 2 <= NFCS < 3:
+                label = torch.tensor(0.3)
+            elif 3 <= NFCS < 4:
+                label = torch.tensor(0.7)
+            elif NFCS >= 4:
+                label = torch.tensor(1.0)
         else:
             # Label encoding
             label = 1 if classe == 'pain' else 0
-                
+
         return label
     
     def __del__(self):
