@@ -10,7 +10,7 @@ from utils.utils import create_folder
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
 DATASETS_FOLDER_PATH = os.path.join('Datasets', 'DatasetFaces')
 CALIBRATION_FOLDER_PATH = os.path.join('Datasets', 'Calibration')
-CALIBRATION_SIZE = 0.0
+CALIBRATION_SIZE = 0.2
 N_FOLDS = 10
 
 def copy_files(src_files, dst_folder):
