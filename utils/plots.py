@@ -10,8 +10,6 @@ from sklearn.metrics import (accuracy_score, average_precision_score,
 
 from calibration.metrics import ECE, calibration_curve
 
-plt.style.use('utils\plotstyle.mplstyle')
-
 def plot_calibration_curve(probs: np.ndarray, 
                            labels: np.ndarray, 
                            n_bins: int=10,
