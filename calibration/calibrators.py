@@ -67,7 +67,7 @@ class TemperatureScaling:
         self.T = None
 
     def _get_logits(self, probs: np.ndarray) -> np.ndarray:
-        return np.log(probs / (1 - probs))
+        return np.log(probs / (1 - (probs-1e-5)))
 
     def fit(self, probs: np.ndarray, labels: np.ndarray) -> None:
         """
