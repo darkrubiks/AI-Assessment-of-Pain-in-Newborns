@@ -10,6 +10,47 @@ import numpy as np
 import cv2
 
 
+def overlap_schiller(mask_1: np.ndarray, mask_2: np.ndarray) -> np.float32:
+    """
+    The result of this metric is a value between 0 and 1. A value 
+    of 1 means that both heatmaps have identical position and contour, 
+    while a value of 0 means that there is no overlap between the
+    viewed areas at all. This metric compare even "0" pixels.
+
+    Parameters
+    ----------
+    mask_1 : the first XAI atribution mask in range [0 - 1]
+
+    mask_2 : the second XAI atribution mask in range [0 - 1]
+
+    See also : Schiller, Dominik, et al. "Relevance-based data masking: a model-agnostic 
+    transfer learning approach for facial expression recognition." Frontiers in Computer
+    Science 2, 2020.
+
+    doi: https://doi.org/10.3389/fcomp.2020.00006.
+    """
+    return (mask_1 == mask_2).mean()
+
+def IoU(mask_1: np.ndarray, mask_2: np.ndarray) -> np.float32:
+    """
+    Compute the Intersection over Union (IoU) between two attribution masks.
+
+    IoU is a metric used to evaluate the overlap between two binary masks, 
+    commonly used in image segmentation tasks. It calculates the ratio between 
+    the area of overlap (intersection) and the area of union between two masks, 
+    returning a value between 0 and 1, where 1 indicates perfect overlap.
+    
+    Parameters
+    ----------
+    mask_1 : the first XAI atribution mask in range [0 - 1]
+
+    mask_2 : the second XAI atribution mask in range [0 - 1]
+    """
+    intersection = np.logical_and(mask_2, mask_1)
+    union = np.logical_or(mask_2, mask_1)
+
+    return np.sum(intersection) / np.sum(union)
+
 def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=False) -> dict:
     """
     This function is responsible for calculating a XAI score which 
