@@ -343,7 +343,7 @@ def probability_histogram(probs: np.ndarray,
     ax_curve.legend(loc='upper right')
 
     plt.savefig(
-        os.path.join(path,f'hist.png'), 
+        os.path.join(path,f'hist.pdf'), 
         dpi=300, 
         bbox_inches='tight'
     )
