@@ -53,7 +53,7 @@ class iCOPEVidDataset(Dataset):
         if self.model_name == "NCNN":
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        image = image/255 # Normalize to [0-1]
+        image = image / 255 # Normalize to [0-1]
         image = np.float32(image)
 
         if self.transform:
@@ -62,19 +62,3 @@ class iCOPEVidDataset(Dataset):
         blank = True if "blank" in self.img_names[idx] else False
         
         return image, blank, self.img_names[idx]
-
-if __name__ == '__main__':
-
-    from torch.utils.data import DataLoader
-
-    import matplotlib.pyplot as plt
-
-    dataset = iCOPEVidDataset('Datasets\\Originais\\iCOPE\\iCOPEvid\\all_frames\\S001_Pain_1_[0]_20s', 'VGGNB')
-    for img in dataset:
-        plt.imshow(img.permute(1, 2, 0).numpy())
-        plt.show()
-        
-
-    test_dataloader = DataLoader(dataset, 
-                                        batch_size=64, 
-                                        shuffle=False)
