@@ -28,11 +28,13 @@ class GradCAM:
 
     target_layer : the target layer to be used
 
+    device : use CPU or CUDA device
+
+    reshape_transform_ViT : used when the model is a ViT
+
     Returns
     -------
     cam : the attribution mask
-
-    device : use CPU or CUDA device
 
     See Also
     --------
@@ -44,12 +46,14 @@ class GradCAM:
     def __init__(self, 
                  model: torch.nn.Module,
                  target_layer: torch.nn.Module,
-                 device: str='cpu') -> None:
+                 device: str='cpu',
+                 reshape_transform_ViT: bool=False) -> None:
         self.device = device
         self.model = model.eval().to(self.device)
         self.target_layer = target_layer
         self.activations = None
         self.gradients = None
+        self.reshape_transform_ViT = reshape_transform_ViT
 
         self.f_hook = self.target_layer.register_forward_hook(self.__get_featuremaps)
         # Because of https://github.com/pytorch/pytorch/issues/61519,
@@ -57,7 +61,13 @@ class GradCAM:
         self.b_hook = self.target_layer.register_forward_hook(self.__get_gradients)
     
     def __get_featuremaps(self, module, input, output):
-        self.activations = output.detach()
+        output = output.detach()
+
+        if self.reshape_transform_ViT:
+            self.activations = self.__reshape_transform(output)
+        else:
+            self.activations = output
+
 
     def __get_gradients(self, module, input, output):
         if not hasattr(output, "requires_grad") or not output.requires_grad:
@@ -65,9 +75,25 @@ class GradCAM:
             return
         
         def __store_grad(grad):
-            self.gradients = grad.detach()
+            grad = grad.detach()
+
+            if self.reshape_transform_ViT:
+                self.gradients = self.__reshape_transform(grad)
+            else:
+                self.gradients = grad
+
 
         output.register_hook(__store_grad)
+
+    def __reshape_transform(self, tensor, height=14, width=14):
+        result = tensor[:, 1:, :].reshape(tensor.size(0),
+                                        height, width, tensor.size(2))
+        # Bring the channels to the first dimension,
+        # like in CNNs.
+        result = result.transpose(2, 3).transpose(1, 2)
+        
+        return result
+
 
     def attribution_mask(self, 
                          image: torch.Tensor) -> np.ndarray:
@@ -92,7 +118,7 @@ class GradCAM:
         cam = torch.sum(self.activations * weights[:, :, None, None], axis=1)
         cam = torch.clamp(cam, min=0)
         cam = cam / (torch.max(cam) + 1e-7)
-        cam = cam.detach().cpu().numpy().squeeze()
+        cam = cam.cpu().numpy().squeeze()
 
         return self.resize_mask(image, cam)
 

@@ -24,14 +24,14 @@ class iCOPEVidDataset(Dataset):
 
     def get_transform(self, model_name):
         """Define different transforms based on the model selected."""
-        if model_name == 'NCNN':
+        if 'NCNN' in model_name:
             # Example transformations for NCNN model
             return transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Resize((120,120), antialias=False)
         ])
 
-        elif model_name == 'VGGNB':
+        elif 'VGGNB' in model_name:
             # Example transformations for VGGNB model
             return transforms.Compose([
                 transforms.ToTensor(),
@@ -39,6 +39,14 @@ class iCOPEVidDataset(Dataset):
                 transforms.Normalize(
                     mean=[0.36703529, 0.41083294, 0.50661294], std=[1, 1, 1])
         ])
+
+        elif 'ViTNB' in model_name:
+            return transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Resize((224,224), antialias=False),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
 
         else:
             raise ValueError(f"Unknown model name: {model_name}")
@@ -50,7 +58,7 @@ class iCOPEVidDataset(Dataset):
         img_path = os.path.join(self.img_dir, self.img_names[idx])
         image = cv2.imread(img_path)
 
-        if self.model_name == "NCNN":
+        if self.model_name == "NCNN" or self.model_name == "ViTNB":
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         image = image / 255 # Normalize to [0-1]
