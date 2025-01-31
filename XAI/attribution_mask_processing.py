@@ -12,66 +12,68 @@ pixels of the input image.
 import cv2
 import numpy as np
 from typing import Tuple
-from sklearn.cluster import KMeans
-
+from sklearn.cluster import KMeans, MiniBatchKMeans  # Use MiniBatchKMeans for speed
 
 def attribution_mask_processing(attribution_mask: np.ndarray, 
-                                n_clusters: int=5, 
-                                ksize: int=11, 
-                                sigma: int=0, 
-                                alpha_thres: float=0.5) -> Tuple[np.ndarray, 
-                                                                 np.ndarray]:
+                                n_clusters: int = 5, 
+                                ksize: int = 11, 
+                                sigma: int = 0, 
+                                alpha_thres: float = 0.5,
+                                use_mini_batch: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Enhance the visualisation of an attribution mask.
-
+    Enhance the visualization of an attribution mask with clustering, blurring,
+    and thresholding – optimized for speed.
+    
     Parameters
     ----------
-    attribution_mask : the attribution mask produced by an XAI method
-
-    n_clusters : number of clusters to be considered on k-means
-
-    ksize : kernel size for the Gaussian Blur
-
-    sigma : kernel standard deviation for the Gaussian Blur
-
-    alpha_thres : the standard deviation threshold used for defining if the
-    pixel should be considered in the alpha channel
-
+    attribution_mask : np.ndarray
+        The attribution mask produced by an XAI method.
+    n_clusters : int, optional
+        Number of clusters for KMeans clustering, by default 5.
+    ksize : int, optional
+        Kernel size for the Gaussian Blur, by default 11.
+    sigma : int, optional
+        Kernel standard deviation for the Gaussian Blur, by default 0.
+    alpha_thres : float, optional
+        Threshold factor for defining the alpha channel, by default 0.5.
+    use_mini_batch : bool, optional
+        If True, uses MiniBatchKMeans for speed, by default True.
+        
     Returns
     -------
-    res2 : the post processed attribution mask 
-
-    alpha_channel : the alpha channel that can be applied to the image for 
-    masking out the pixels
+    Tuple[np.ndarray, np.ndarray]
+        - Post-processed attribution mask normalized to [0,1].
+        - Alpha channel mask with pixels above threshold set to 1, others 0.
     """
-    # Checks if the attribution_mask has 3 dimensions
-    if len(attribution_mask.shape) <= 2:
-        attribution_mask = np.expand_dims(attribution_mask, axis=-1)
-
-    # Fit he kmeans to the flattened attribution_mask
-    kmeans = KMeans(n_clusters=n_clusters, n_init='auto', random_state=123)
-    kmeans.fit(attribution_mask.reshape(-1, 1))
-
-    # Assign to each pixel the corresponding cluster center from kmeans
-    cluster_centers = kmeans.cluster_centers_
-    result = cluster_centers[kmeans.labels_.flatten()]
-
-    # Reshape to the original size
-    result = result.reshape((attribution_mask.shape))
-    result = np.squeeze(result)
-
-    # Apply Gaussian Blur
-    result = cv2.GaussianBlur(result,(ksize,ksize), sigma)
-
-    # Normalization 0 - 1
-    result_max = np.max(result)
-    result_min = np.min(result)
-    result = (result - result_min) / (result_max - result_min)
-
-    # Creates the alpha channel
-    alpha_channel = np.ones(np.squeeze(result).shape, dtype=result.dtype)
-    alpha_channel[np.where(result <= result.mean() + 
-                           result.std()*alpha_thres)[:2]] = 0
-
+    # Ensure the mask is at least 3D for clustering (H, W, 1)
+    if attribution_mask.ndim <= 2:
+        attribution_mask = attribution_mask[..., np.newaxis]
+    
+    # Flatten the mask for clustering.
+    flat_mask = attribution_mask.reshape(-1, 1)
+    
+    # Choose clustering method.
+    if use_mini_batch:
+        kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=123, batch_size=1024)
+    else:
+        kmeans = KMeans(n_clusters=n_clusters, n_init='auto', random_state=123)
+    
+    # Fit clustering and assign each pixel to its cluster center.
+    kmeans.fit(flat_mask)
+    clustered = kmeans.cluster_centers_[kmeans.labels_].reshape(attribution_mask.shape)
+    
+    # Remove extra singleton dimensions (if any).
+    result = np.squeeze(clustered)
+    
+    # Apply Gaussian blur.
+    result = cv2.GaussianBlur(result, (ksize, ksize), sigma)
+    
+    # Normalize to the range [0, 1] (with epsilon to prevent div-by-zero).
+    r_min, r_max = result.min(), result.max()
+    result = (result - r_min) / (r_max - r_min + 1e-8)
+    
+    # Compute threshold and build alpha channel in one vectorized operation.
+    thresh = result.mean() + result.std() * alpha_thres
+    alpha_channel = (result > thresh).astype(result.dtype)
+    
     return result, alpha_channel
-
