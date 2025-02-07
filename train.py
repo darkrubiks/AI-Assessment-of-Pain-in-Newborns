@@ -6,11 +6,13 @@ Date: 10/07/2022
 
 Code for training Deep Learning models.
 """
+
 import argparse
 import os
 import shutil
 import time
 from datetime import datetime
+import logging
 
 import torch
 import torch.nn as nn
@@ -18,50 +20,67 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.optim.lr_scheduler as schedulers
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 import dataloaders
 import models
 from utils.utils import load_config, write_to_csv, create_folder
 from validate import validation_metrics, validation_plots, calibration_metrics
 
-# Get current directory
+# Configure native logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+# Get current directory and save directory
 ROOT = os.getcwd()
 SAVE_DIR = os.path.join(ROOT, 'experiments')
-    
+
+
+def format_metrics(metrics, precision=4):
+    return {k: f"{v:.{precision}f}" if isinstance(v, (float, int)) else v
+            for k, v in metrics.items()}
+
 
 def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0.0):
     # Custom binary cross-entropy loss with label smoothing.
     epsilon = 1.0 if epsilon > 1.0 else epsilon
     smoothed_labels = (1 - epsilon) * labels + epsilon / 2
     loss = nn.BCEWithLogitsLoss()(outputs, smoothed_labels)
-
     return loss
 
 
 def load_dataset(config):
     # Load the Dataset
-    train_dataset = getattr(dataloaders, config['model']+'Dataset') \
-                           (path=config['path_train'],
-                            soft=config['soft_label'],
-                            cache=config['cache'])
+    train_dataset = getattr(dataloaders, config['model'] + 'Dataset')(
+        path=config['path_train'],
+        soft=config['soft_label'],
+        cache=config['cache']
+    )
 
-    test_dataset = getattr(dataloaders, config['model']+'Dataset') \
-                          (path=config['path_test'],
-                           cache=config['cache'])
+    test_dataset = getattr(dataloaders, config['model'] + 'Dataset')(
+        path=config['path_test'],
+        cache=config['cache']
+    )
     
     # Batch and Shuffle the Dataset
-    train_dataloader = DataLoader(train_dataset, 
-                                  batch_size=config['batch_size'], 
-                                  shuffle=True,
-                                  num_workers=config['num_workers'],
-                                  pin_memory=config['pin_memory'])
+    train_dataloader = DataLoader(
+        train_dataset, 
+        batch_size=config['batch_size'], 
+        shuffle=True,
+        num_workers=config['num_workers'],
+        pin_memory=config['pin_memory']
+    )
     
-    test_dataloader = DataLoader(test_dataset, 
-                                 batch_size=config['batch_size'], 
-                                 shuffle=False,
-                                 num_workers=config['num_workers'],
-                                 pin_memory=config['pin_memory'])
+    test_dataloader = DataLoader(
+        test_dataset, 
+        batch_size=config['batch_size'], 
+        shuffle=False,
+        num_workers=config['num_workers'],
+        pin_memory=config['pin_memory']
+    )
 
     return train_dataloader, test_dataloader
 
@@ -74,8 +93,8 @@ def train(model, dataloader, optimizer, config):
     preds_list = torch.empty(0, device=config['device'])
     probs_list = torch.empty(0, device=config['device'])
     labels_list = torch.empty(0, device=config['device'])
- 
-    for i,batch in enumerate(dataloader, start=1):
+    
+    for i, batch in enumerate(dataloader, start=1):
         inputs = batch['image'].to(config['device'])
         labels = batch['label'].to(config['device'])
 
@@ -90,27 +109,31 @@ def train(model, dataloader, optimizer, config):
         loss.backward()
         optimizer.step()
 
-        # Only when using soft labels
+        # When using soft labels, convert to hard labels
         if config['soft_label']:
             labels = torch.ge(labels, 0.5).type(torch.int)
 
         # Statistics
-        probs = F.sigmoid(outputs).detach()
+        probs = torch.sigmoid(outputs).detach()  # Using torch.sigmoid over F.sigmoid (deprecated)
         preds = torch.ge(probs, 0.5).type(torch.int)
         running_loss += loss.item()
         preds_list = torch.cat([preds_list, preds])
         probs_list = torch.cat([probs_list, probs])
         labels_list = torch.cat([labels_list, labels])
 
-        # Only update after 20 batches
-        if i % 20 == 0:
-            metrics = validation_metrics(preds_list.cpu().numpy(), probs_list.cpu().numpy(), labels_list.cpu().numpy())
-            metrics.update(calibration_metrics(probs_list.cpu().numpy(), labels_list.cpu().numpy()))
-            metrics.update({'Loss': running_loss/i})
-            # Update progress bar
-            dataloader.set_postfix(metrics)
+    # Compute final metrics after processing all batches
+    final_metrics = validation_metrics(
+        preds_list.cpu().numpy(),
+        probs_list.cpu().numpy(),
+        labels_list.cpu().numpy()
+    )
+    final_metrics.update(calibration_metrics(
+        probs_list.cpu().numpy(),
+        labels_list.cpu().numpy()
+    ))
+    final_metrics.update({'Loss': running_loss / i})
 
-    return metrics
+    return final_metrics
 
 
 def test(model, dataloader, config):
@@ -122,9 +145,9 @@ def test(model, dataloader, config):
     probs_list = torch.empty(0, device=config['device'])
     labels_list = torch.empty(0, device=config['device'])
 
-    # Disable gradient computation and reduce memory consumption
+    # Disable gradient computation
     with torch.no_grad():
-        for i,batch in enumerate(dataloader, start=1):
+        for i, batch in enumerate(dataloader, start=1):
             inputs = batch['image'].to(config['device'])
             labels = batch['label'].to(config['device'])
 
@@ -133,21 +156,26 @@ def test(model, dataloader, config):
             loss = label_smooth_binary_cross_entropy(outputs, labels, epsilon=config['label_smoothing'])
 
             # Statistics
-            probs = F.sigmoid(outputs).detach()
+            probs = torch.sigmoid(outputs)
             preds = torch.ge(probs, 0.5).type(torch.int)
             running_loss += loss.item()
             preds_list = torch.cat([preds_list, preds])
             probs_list = torch.cat([probs_list, probs])
             labels_list = torch.cat([labels_list, labels])
 
-            metrics = validation_metrics(preds_list.cpu().numpy(), probs_list.cpu().numpy(), labels_list.cpu().numpy())
-            metrics.update(calibration_metrics(probs_list.cpu().numpy(), labels_list.cpu().numpy()))
-            metrics.update({'Loss': running_loss/i})
-
-            # Update progress bar
-            dataloader.set_postfix(metrics)
-
-    return metrics
+    # Compute final metrics after processing all batches
+    final_metrics = validation_metrics(
+        preds_list.cpu().numpy(),
+        probs_list.cpu().numpy(),
+        labels_list.cpu().numpy()
+    )
+    final_metrics.update(calibration_metrics(
+        probs_list.cpu().numpy(),
+        labels_list.cpu().numpy()
+    ))
+    final_metrics.update({'Loss': running_loss / i})
+   
+    return final_metrics
 
 
 def main(config):
@@ -159,27 +187,25 @@ def main(config):
     for folder in ['Logs', 'Model', 'Results']:
         create_folder(os.path.join(experiment_dir, folder))
    
-    # Log names
-    train_log = os.path.join(experiment_dir, 'Logs', f"train_log.csv")
-    test_log = os.path.join(experiment_dir, 'Logs', f"test_log.csv")
+    # Log file names
+    train_log = os.path.join(experiment_dir, 'Logs', "train_log.csv")
+    test_log = os.path.join(experiment_dir, 'Logs', "test_log.csv")
 
     # Filename to save the model
-    model_file = os.path.join(experiment_dir, 'Model', f"best_model.pt")
-    shutil.copy(args.config, os.path.join(experiment_dir, 'Model', 'config.yaml')) # Copy .yaml file
+    model_file = os.path.join(experiment_dir, 'Model', "best_model.pt")
+    shutil.copy(args.config, os.path.join(experiment_dir, 'Model', 'config.yaml'))  # Copy config file
 
-    # Instantiate the model
+    # Instantiate the model and send to device
     model = getattr(models, config['model'])()
     model = model.to(config['device'])
 
-    # Define optimizer
+    # Define optimizer and scheduler (if any)
     optimizer = getattr(optim, config['optimizer'])(model.parameters(), **config['optimizer_hyp'])
-
-    # Define scheduler
     if 'scheduler' in config:
         scheduler = getattr(schedulers, config['scheduler'])(optimizer, **config['scheduler_hyp'])
 
-    counter = 0 # Counter for the number of epochs with no improvement
-    best_val_loss = float('inf') # Variable to record the best test loss
+    counter = 0  # For early stopping
+    best_val_loss = float('inf')  # To record the best test loss
 
     # Load data
     train_dataloader, test_dataloader = load_dataset(config)
@@ -188,55 +214,42 @@ def main(config):
     since = time.time()
 
     # Training process
-    for epoch in range(1,config['epochs']+1):
+    for epoch in range(1, config['epochs'] + 1):
+        logger.info(f"Starting Epoch [{epoch}/{config['epochs']}]")
 
-        # TQDM progress bar
-        train_dataloader = tqdm(train_dataloader, unit=' batch', colour='#00ff00', smoothing=0)
-        train_dataloader.set_description(f"Train - Epoch [{epoch}/{config['epochs']}]")
-
-        # Train function
+        # Training phase
         train_metrics = train(model, train_dataloader, optimizer, config)
         write_to_csv(train_log, **train_metrics)
+        logger.info(f"Finished Training Epoch {epoch}: {format_metrics(train_metrics)}")
 
-        # Close TQDM after its iteration
-        train_dataloader.close()
-
-        # TQDM progress bar
-        test_dataloader = tqdm(test_dataloader, unit=' batch', colour='#00ff00', smoothing=0)
-        test_dataloader.set_description(f"Test  - Epoch [{epoch}/{config['epochs']}]")
-        
-        # Test function
+        # Testing phase
         test_metrics = test(model, test_dataloader, config)
         write_to_csv(test_log, **test_metrics)
+        logger.info(f"Finished Testing Epoch {epoch}: {format_metrics(test_metrics)}")
 
-        # Close TQDM after its iteration
-        test_dataloader.close()
-
-        print()
-
-        # Model saving
+        # Early stopping and model saving
         epoch_loss = test_metrics['Loss']
         if epoch_loss < best_val_loss:
             best_val_loss = epoch_loss
             counter = 0
             torch.save(model.state_dict(), model_file)
+            logger.info(f"New best model saved with loss {best_val_loss:.4f}")
         else:
             counter += 1
+            logger.info(f"No improvement for {counter} epoch(s).")
 
-        # Update scheduler
         if 'scheduler' in config:
             scheduler.step()
 
-        # Check if the stopping criterion is met
         if counter >= config['patience']:
-            print(f'Early stopping at epoch {epoch}\n')
+            logger.info(f"Early stopping at epoch {epoch}")
             break
 
     time_elapsed = time.time() - since
-    print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n')
-    
+    logger.info(f"Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
+
     # Run validation plots on the best model
-    print(f"Saving Results to {os.path.join(experiment_dir, 'Results')}\n")
+    logger.info(f"Saving Results to {os.path.join(experiment_dir, 'Results')}")
     model.eval()
     model.load_state_dict(torch.load(model_file))
 
@@ -249,23 +262,23 @@ def main(config):
             inputs = batch['image'].to(config['device'])
             labels = batch['label'].to(config['device'])
 
-            # Calculate loss
             outputs = model(inputs)
-            # Statistics
-            probs = F.sigmoid(outputs)
+            probs = torch.sigmoid(outputs)
             preds = torch.ge(probs, 0.5).type(torch.int)
             
             preds_list = torch.cat([preds_list, preds])
             labels_list = torch.cat([labels_list, labels])
             probs_list = torch.cat([probs_list, probs])
 
-    validation_plots(preds_list.cpu().numpy(), 
-                     probs_list.cpu().numpy(), 
-                     labels_list.cpu().numpy(), 
-                     path=os.path.join(experiment_dir, 'Results'))
+    validation_plots(
+        preds_list.cpu().numpy(), 
+        probs_list.cpu().numpy(), 
+        labels_list.cpu().numpy(), 
+        path=os.path.join(experiment_dir, 'Results')
+    )
 
-if __name__=='__main__':
 
+if __name__ == '__main__':
     # Set manual seed
     torch.manual_seed(1234)
 
@@ -282,10 +295,10 @@ if __name__=='__main__':
         #print('Please dont use soft labels and label smoothing together!')
         #print('Aborting...')
         #exit(0)
-
-    if config['cache'] and config['num_workers'] > 0:
-        print('Number of workers should be zero to use cache!')
-        print('Aborting...')
+        
+    if config['soft_label'] and config['label_smoothing'] !=0:
+        logger.error('Please dont use soft labels and label smoothing together!')
         exit(0)
+
 
     main(config)

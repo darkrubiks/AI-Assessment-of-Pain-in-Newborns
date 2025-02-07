@@ -8,32 +8,39 @@ This code is responsible for augmenting the train set. The Data Augmentation
 pipeline will generate 20 new images from 1 single face image. The facial land-
 marks are also augmented.
 """
+
 import os
 import pickle
 from ast import literal_eval
+import logging
 
 import albumentations as A
 import cv2
 import pandas as pd
-from tqdm import tqdm
 
 from utils.utils import create_folder, scale_coords
 
+# Configure native logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
 # Constants
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
-CALIBRATION_FOLDER_PATH = os.path.join('Datasets', 'Calibration')
 N_FOLDS = len(os.listdir(FOLDS_FOLDER_PATH))
 AUGMENTED_IMAGES = 20
 AUGMENTED_SUFFIX = "_AUG_"
-
 
 def resize_original_img(path, file_name):
     # Read image
     img = cv2.imread(os.path.join(path, file_name))
 
-    # Get correspondent Face and keypoints coordinates
-    face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['face_coordinates'].values[0]
-    keypoints_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name']==file_name]['keypoints_coordinates'].values[0]
+    # Get corresponding face and keypoints coordinates
+    face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name'] == file_name]['face_coordinates'].values[0]
+    keypoints_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name'] == file_name]['keypoints_coordinates'].values[0]
 
     # Scale the keypoints to the cropped face
     scaled_keypoints = [scale_coords(x, y, face_coords) for x, y in keypoints_coords]
@@ -41,15 +48,16 @@ def resize_original_img(path, file_name):
 
     # Save keypoints and resized image
     cv2.imwrite(os.path.join(path, file_name), resized['image'])
-
-    with open(os.path.join(path, 'Keypoints', file_name.split('.jpg')[0] + ".pkl"), 'wb') as f:
+    keypoints_path = os.path.join(path, 'Keypoints')
+    create_folder(keypoints_path)
+    with open(os.path.join(keypoints_path, file_name.split('.jpg')[0] + ".pkl"), 'wb') as f:
         pickle.dump(resized['keypoints'], f)
 
     return resized['image'], resized['keypoints']
 
-# Augmentation Pipeline, Affine transformation is always applied, the Horizontal
-# Flip and RandomBrightnessContrast are applied with a 50% chance. All images and
-# and keypoints are resized to 512x512 
+# Augmentation Pipeline: Affine transformation is always applied; Horizontal Flip and
+# RandomBrightnessContrast are applied with a 50% chance. All images and keypoints
+# are resized to 512x512.
 transform = A.Compose(
     [
         A.Affine(
@@ -73,52 +81,46 @@ resize = A.Compose(
     keypoint_params=A.KeypointParams(format="xy"),
 )
 
-# Read the data from the .csv
+# Read the data from the CSV file
 iCOPE_UNIFESP_data = pd.read_csv('iCOPE+UNIFESP_data.csv')
-iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].apply(lambda x: literal_eval(x))
-iCOPE_UNIFESP_data['keypoints_coordinates'] = iCOPE_UNIFESP_data['keypoints_coordinates'].apply(lambda x: literal_eval(x))
+iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].apply(literal_eval)
+iCOPE_UNIFESP_data['keypoints_coordinates'] = iCOPE_UNIFESP_data['keypoints_coordinates'].apply(literal_eval)
 
-# Apply to Calibration set only resizing
-create_folder(os.path.join(CALIBRATION_FOLDER_PATH, 'Keypoints'))
-print('Applying to Calibration Set')
-for file_name in tqdm(os.listdir(CALIBRATION_FOLDER_PATH)):
-    if file_name.endswith('.jpg'):
-        _ = resize_original_img(CALIBRATION_FOLDER_PATH, file_name)
-
-# For each Fold the images are augmented 20 times, verifying that the Keypoints
-# are still in bounds of the new image
+# Process each Fold for augmentation
 for fold in range(N_FOLDS):
-    print(f'\nAugmenting Fold: {fold:02}')
+    logger.info(f"Augmenting Fold: {fold:02}")
+    fold_str = str(fold)
 
-    fold = str(fold)
-
-    train_fold_path = os.path.join(FOLDS_FOLDER_PATH , fold, 'Train')
-    test_fold_path = os.path.join(FOLDS_FOLDER_PATH , fold, 'Test')
+    train_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold_str, 'Train')
+    test_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold_str, 'Test')
     create_folder(os.path.join(train_fold_path, 'Keypoints'))
     create_folder(os.path.join(test_fold_path, 'Keypoints'))
 
-    print('Applying to Test Set')
-    for file_name in tqdm(os.listdir(test_fold_path)):
-        if file_name.endswith('.jpg'):
-            _ = resize_original_img(test_fold_path, file_name)
+    # Process Test Set: apply only resizing
+    logger.info("Applying resizing to Test Set")
+    test_files = [f for f in os.listdir(test_fold_path) if f.endswith('.jpg')]
+    for file_name in test_files:
+        _ = resize_original_img(test_fold_path, file_name)
+    logger.info("Completed processing Test Set")
 
-    print('Applying to Train Set')
-    for file_name in tqdm(os.listdir(train_fold_path)):
-        if file_name.endswith('.jpg'):
-            img, scaled_keypoints = resize_original_img(train_fold_path, file_name)
+    # Process Train Set: apply resizing and augmentation
+    logger.info("Applying resizing and augmentation to Train Set")
+    train_files = [f for f in os.listdir(train_fold_path) if f.endswith('.jpg')]
+    for file_name in train_files:
+        img, scaled_keypoints = resize_original_img(train_fold_path, file_name)
 
-            for i in range(AUGMENTED_IMAGES):
+        for i in range(AUGMENTED_IMAGES):
+            transformed = transform(image=img, keypoints=scaled_keypoints)
+            # Ensure that all keypoints are present
+            while len(transformed['keypoints']) < 5:
                 transformed = transform(image=img, keypoints=scaled_keypoints)
 
-                # Keep generating images until all Keypoints are present
-                while len(transformed['keypoints']) < 5:
-                    transformed = transform(image=img, keypoints=scaled_keypoints)
+            # Save augmented image
+            aug_file_name = f'{i:02}{AUGMENTED_SUFFIX}{file_name}'
+            cv2.imwrite(os.path.join(train_fold_path, aug_file_name), transformed['image'])
 
-                # Save image
-                aug_file_name = f'{i:02}{AUGMENTED_SUFFIX}{file_name}'
-                cv2.imwrite(os.path.join(train_fold_path, aug_file_name), transformed['image'])
-
-                # Save Keypoints
-                aug_landmarks_file = os.path.join(train_fold_path, 'Keypoints', aug_file_name.split('.jpg')[0] + ".pkl")
-                with open(aug_landmarks_file, 'wb') as f:
-                    pickle.dump(transformed['keypoints'], f)
+            # Save corresponding keypoints
+            aug_landmarks_file = os.path.join(train_fold_path, 'Keypoints', aug_file_name.split('.jpg')[0] + ".pkl")
+            with open(aug_landmarks_file, 'wb') as f:
+                pickle.dump(transformed['keypoints'], f)
+    logger.info("Completed processing Train Set")
