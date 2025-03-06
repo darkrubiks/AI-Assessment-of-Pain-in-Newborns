@@ -1,105 +1,125 @@
-import gc
-import glob
-import os
+"""
+Module for a unified Dataset that supports optional soft labels and caching.
 
+This Dataset applies preset transformations based on the provided model name and
+loads images from a directory. Optionally, it reads a CSV file to compute soft labels.
+"""
+
+import os
+import glob
+import gc
+import re
 import numpy as np
 import pandas as pd
-import torch
 from torch.utils.data import Dataset
+from PIL import Image
+from dataloaders.presets import PresetTransform, SoftLabel
 
+
+def safe_glob(path_pattern):
+    # Escape special glob characters ([, ]) by wrapping them in brackets
+    escaped_pattern = re.sub(r'([\[\]])', r'[\1]', path_pattern)
+    return glob.glob(escaped_pattern)
 
 class BaseDataset(Dataset):
     """
-    Base Class for loading the dataset.
+    Dataset for loading image datasets with optional soft labels and caching.
 
     Parameters
     ----------
-    path : the directory where the images are located
-
-    soft : load labels as soft labels using the NFCS score [sigmoid, step, or linear]
-    
-    cache : if True it will cache all images in RAM for faster training
+    model_name : str
+        The name of the model. Determines the image transformations applied.
+    img_dir : str
+        The directory where the images are located.
+    soft : str, optional
+        Soft label method to use (e.g., 'SIGMOID', 'STEP', 'LINEAR'). Use 'None'
+        (case insensitive) for binary labels. Default is 'None'.
+    cache : bool, optional
+        If True, caches all images and labels in RAM for faster training. Default is False.
     """
-    def __init__(self, 
-                path: str,
-                soft: str='None',
-                cache: bool=False) -> None:
-        self.path = path
+
+    def __init__(self, model_name: str, img_dir: str, soft: str = 'None', cache: bool = False) -> None:
+        self.model_name = model_name.upper()
+        self.img_dir = img_dir
         self.cache = cache
-        self.soft = soft
-        self.images_cached = []
-        self.labels_cached = []
-        
-        # Make sure to have this file in your main directory
-        self.dataframe = pd.read_csv('iCOPE+UNIFESP_data.csv',
-                                     usecols=['new_file_name','NFCS', 'class'])
+        self.soft = soft.upper()
 
-        # Get only the files with *.jpg extension
-        if self.soft:
-            self.img_names = glob.glob(os.path.join(self.path, '*_UNIFESP_*.jpg'))
-        else:
-            self.img_names = glob.glob(os.path.join(self.path, '*.jpg'))
-    
-        # Cache images on RAM
+        # Determine file pattern based on soft labeling option.
+        pattern = '*_UNIFESP_*.jpg' if self.soft != 'NONE' else '*.jpg'
+        self.img_paths = sorted(safe_glob(os.path.join(self.img_dir, pattern)))
+        if not self.img_paths:
+            raise ValueError(f"No images found in {self.img_dir} with pattern {pattern}")
+
+        # Get the transformation preset for the given model.
+        self.transform = PresetTransform(self.model_name).transforms
+
+        if self.soft != "NONE":
+            self.nfcs_df = pd.read_csv('iCOPE+UNIFESP_data.csv', usecols=['new_file_name', 'NFCS'])
+            self.soft_labeler = SoftLabel(self.soft)
+
+        # Initialize caches.
+        self._images_cached = []
+        self._labels_cached = []
+
+        # Cache images and labels if requested.
         if self.cache:
-            print(f'Caching images and labels please wait....')
-            for i in range(len(self.img_names)):
-                self.images_cached.append(self.load_image(i))
-                self.labels_cached.append(self.load_label(i))
+            print('Caching images and labels, please wait...')
+            for idx in range(len(self.img_paths)):
+                self._images_cached.append(self._load_image(idx))
+                self._labels_cached.append(self._load_label(idx))
 
-    def load_image(self, idx):
-        raise Exception("Not Implemented")
-    
-    def load_label(self, idx):
-        new_file_name = self.img_names[idx].split(os.sep)[-1]
-        # Filter out the augmented prefix
-        if 'AUG' in new_file_name:
-            new_file_name = '_'.join(new_file_name.split('_')[2:])
+        
 
-        dataframe_result = self.dataframe[self.dataframe['new_file_name']==new_file_name]
-        classe = dataframe_result['class'].values[0]
+    def _load_image(self, idx: int):
+        """
+        Load and transform the image at the given index.
+        """
+        img_path = self.img_paths[idx]
+        image = Image.open(img_path).convert("RGB")
 
-        # Get NFCS score
-        NFCS = dataframe_result['NFCS'].values[0]
+        if self.model_name == 'VGGNB':
+            # For VGGNB, convert image mode as required.
+            image = Image.fromarray(np.array(image)[:, :, ::-1])
 
-        # Soft-Label methods
-        if self.soft == "sigmoid":
-            S_x = 1 / (1 + np.exp(-NFCS + 2.5)) 
-            label = torch.tensor(S_x)
+        return self.transform(image)
 
-        elif self.soft == "linear":
-            S_x = 0.2 * NFCS 
-            label = torch.tensor(S_x)
+    def _load_label(self, idx: int):
+        """
+        Load the label for the image at the given index.
+        """
+        filename = os.path.basename(self.img_paths[idx])
 
-        elif self.soft == "step":
-            if NFCS <= 1:
-                label = torch.tensor(0.0)
-            elif 2 <= NFCS < 3:
-                label = torch.tensor(0.3)
-            elif 3 <= NFCS < 4:
-                label = torch.tensor(0.7)
-            elif NFCS >= 4:
-                label = torch.tensor(1.0)
+        # Remove augmented prefix if present.
+        if 'AUG' in filename:
+            filename = '_'.join(filename.split('_')[2:])
+
+        # Use soft labeling if specified.
+        if self.soft != 'NONE':
+            row = self.nfcs_df[self.nfcs_df['new_file_name'] == filename]
+            if row is None:
+                raise ValueError(f"Label not found for {filename}")
+            nfcs = row['NFCS'].values[0]
+            label = self.soft_labeler.get_soft_label(nfcs)
         else:
-            # Label encoding
-            label = 1 if classe == 'pain' else 0
+            # Binary labeling: 1 for 'pain', 0 otherwise.
+            label = 0 if 'nopain' in filename.split('_')[-1] else 1
 
         return label
-    
-    def __del__(self):
-        del self.labels_cached
-        del self.images_cached
-        gc.collect()
 
     def __len__(self):
-        return len(self.img_names)
+        return len(self.img_paths)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         if self.cache:
-            image = self.images_cached[idx]
-            label = self.labels_cached[idx]
+            image = self._images_cached[idx]
+            label = self._labels_cached[idx]
         else:
-            image = self.load_image(idx)
-            label = self.load_label(idx)
+            image = self._load_image(idx)
+            label = self._load_label(idx)
 
-        return {'image':image, 'label':label}
+        return {'image': image, 'label': label}
+
+    def __del__(self):
+        del self._labels_cached
+        del self._images_cached
+        gc.collect()

@@ -14,7 +14,7 @@ num_workers: 0
 epochs: 120
 patience: 43
 batch_size: 16
-soft_label: False
+soft_label: 'None'
 label_smoothing: 0.3
 optimizer: RMSprop
 optimizer_hyp:
