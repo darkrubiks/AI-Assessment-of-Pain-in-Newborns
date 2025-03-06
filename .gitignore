@@ -7,8 +7,7 @@ images/
 experiments/
 
 # ignore large models files
-models/*.pt
-models/*.pth
+models/weights
 
 # ignore these files
 relatório.xlsx
