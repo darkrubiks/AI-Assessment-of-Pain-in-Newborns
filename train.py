@@ -21,7 +21,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as schedulers
 from torch.utils.data import DataLoader
 
-import dataloaders
+from dataloaders import BaseDataset
 import models
 from utils.utils import load_config, write_to_csv, create_folder
 from validate import validation_metrics, validation_plots, calibration_metrics
@@ -54,15 +54,15 @@ def label_smooth_binary_cross_entropy(outputs, labels, epsilon=0.0):
 
 def load_dataset(config):
     # Load the Dataset
-    train_dataset = getattr(dataloaders, config['model'] + 'Dataset')(
-        path=config['path_train'],
-        soft=config['soft_label'],
-        cache=config['cache']
+    train_dataset = BaseDataset(model_name=config['model'],
+                                img_dir=config['path_train'],
+                                soft=config['soft_label'],
+                                cache=config['cache']
     )
 
-    test_dataset = getattr(dataloaders, config['model'] + 'Dataset')(
-        path=config['path_test'],
-        cache=config['cache']
+    test_dataset = BaseDataset(model_name=config['model'],
+                                img_dir=config['path_test'],
+                                cache=config['cache']
     )
     
     # Batch and Shuffle the Dataset
@@ -93,10 +93,18 @@ def train(model, dataloader, optimizer, config):
     preds_list = torch.empty(0, device=config['device'])
     probs_list = torch.empty(0, device=config['device'])
     labels_list = torch.empty(0, device=config['device'])
+
+    # Initialize counters for image processing speed
+    total_images = 0
+    epoch_start_time = time.time()
     
     for i, batch in enumerate(dataloader, start=1):
         inputs = batch['image'].to(config['device'])
         labels = batch['label'].to(config['device'])
+
+        # Count images processed in this batch
+        batch_size = inputs.size(0)
+        total_images += batch_size
 
         # Zero the parameter gradients
         optimizer.zero_grad()
@@ -121,6 +129,10 @@ def train(model, dataloader, optimizer, config):
         probs_list = torch.cat([probs_list, probs])
         labels_list = torch.cat([labels_list, labels])
 
+    # Compute epoch elapsed time and images per second
+    epoch_time = time.time() - epoch_start_time
+    images_per_sec = total_images / epoch_time if epoch_time > 0 else 0
+
     # Compute final metrics after processing all batches
     final_metrics = validation_metrics(
         preds_list.cpu().numpy(),
@@ -131,7 +143,8 @@ def train(model, dataloader, optimizer, config):
         probs_list.cpu().numpy(),
         labels_list.cpu().numpy()
     ))
-    final_metrics.update({'Loss': running_loss / i})
+    final_metrics.update({'Loss': running_loss / i,
+                          'Images/s': images_per_sec})
 
     return final_metrics
 
@@ -197,6 +210,17 @@ def main(config):
 
     # Instantiate the model and send to device
     model = getattr(models, config['model'])()
+
+    # TODO pre trained NCNN
+    #model.fc_4 = nn.Linear(5 * 5 * 64, 512)
+    #model.output = nn.Linear(512, 10572)
+
+    #checkpoint = torch.load('models/NCNN_cassia.pth')
+    #model.load_state_dict(checkpoint['model_state_dict'])
+
+    #model.fc_4 = nn.Linear(5 * 5 * 64, 8)
+    #model.output = nn.Linear(8, 1)
+
     model = model.to(config['device'])
 
     # Define optimizer and scheduler (if any)
