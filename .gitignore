@@ -8,6 +8,7 @@ experiments/
 
 # ignore large models files
 models/*.pt
+models/*.pth
 
 # ignore these files
 relatório.xlsx
