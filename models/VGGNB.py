@@ -26,7 +26,7 @@ class VGGNB(nn.Module):
     def __init__(self) -> None:
         super(VGGNB, self).__init__()
 
-        self.VGGFace = torch.load(os.path.join('models','VGG_face_original_model.pt'))
+        self.VGGFace = torch.load(os.path.join('models/weights','VGG_face_original_model.pt'))
 
         for param in self.VGGFace.parameters():
             param.requires_grad  = False
