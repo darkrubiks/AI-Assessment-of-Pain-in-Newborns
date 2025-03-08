@@ -18,6 +18,7 @@ import logging
 import cv2
 import pandas as pd
 from insightface.app import FaceAnalysis
+from utils import scale_coords
 
 # Configure native logging
 logging.basicConfig(
@@ -88,6 +89,8 @@ for index, row in dataframe.iterrows():
         bbox[bbox < 0] = 0
         keypoints = face['kps'].astype('int')
         landmarks = face['landmark_2d_106'].astype('int')
+        # Scale the landmarks based on the previous bbox, so it matches the facial image shape
+        scaled_landmarks = [scale_coords(x, y, bbox) for x, y in landmarks]
 
         x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
         cropped_face = img[y1:y2, x1:x2]
@@ -98,7 +101,7 @@ for index, row in dataframe.iterrows():
 
         landmarks_file = os.path.join(dataset_landmarks_path, f'{file_name.split(".")[0]}.pkl')
         with open(landmarks_file, 'wb') as f:
-            pickle.dump(landmarks, f)
+            pickle.dump(scaled_landmarks, f)
 
     except IndexError:
         logger.warning(f"No faces were detected on image {file_name}")

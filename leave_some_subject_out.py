@@ -95,3 +95,43 @@ for fold in range(N_FOLDS):
     test_files = dataframe[dataframe['new_subject'].isin(test_subjects[fold])]['new_file_name']
     copy_files(test_files, test_path)
     logger.info(f"Copied {len(test_files)} testing images to {test_path}")
+
+# --- Additional splitting of the dataset using train_test_split ---
+# Global variable for train size (adjust this value as needed)
+TRAIN_SIZE = 0.9  # Example: 90% training, 10% testing
+
+# Split the dataset into train and test sets, stratifying based on the 'class' column
+train_set, test_set = train_test_split(
+    dataframe,
+    train_size=TRAIN_SIZE,
+    stratify=dataframe['class'],
+    random_state=42
+)
+logger.info(f"Dataset split into train ({len(train_set)}) and test ({len(test_set)}) sets with train size: {TRAIN_SIZE}")
+
+# --- Save the train_test_split data into TrainAll folder with subfolders Train and Test ---
+TRAIN_ALL_FOLDER = os.path.join('Datasets', 'Folds', 'TrainAll')
+TRAIN_ALL_TRAIN_FOLDER = os.path.join(TRAIN_ALL_FOLDER, 'Train')
+TRAIN_ALL_TEST_FOLDER = os.path.join(TRAIN_ALL_FOLDER, 'Test')
+
+# Remove existing TrainAll folder if it exists
+if os.path.exists(TRAIN_ALL_FOLDER):
+    rmtree(TRAIN_ALL_FOLDER)
+    logger.info(f"Removed existing folder: {TRAIN_ALL_FOLDER}")
+
+# Create TrainAll and its subfolders
+create_folder(TRAIN_ALL_FOLDER)
+create_folder(TRAIN_ALL_TRAIN_FOLDER)
+logger.info(f"Created folder: {TRAIN_ALL_TRAIN_FOLDER}")
+create_folder(TRAIN_ALL_TEST_FOLDER)
+logger.info(f"Created folder: {TRAIN_ALL_TEST_FOLDER}")
+
+# Copy training images to TrainAll/Train
+train_all_train_files = train_set['new_file_name']
+copy_files(train_all_train_files, TRAIN_ALL_TRAIN_FOLDER)
+logger.info(f"Copied {len(train_all_train_files)} training images to {TRAIN_ALL_TRAIN_FOLDER}")
+
+# Copy testing images to TrainAll/Test
+train_all_test_files = test_set['new_file_name']
+copy_files(train_all_test_files, TRAIN_ALL_TEST_FOLDER)
+logger.info(f"Copied {len(train_all_test_files)} testing images to {TRAIN_ALL_TEST_FOLDER}")
