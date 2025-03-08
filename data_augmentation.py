@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Constants
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
-N_FOLDS = len(os.listdir(FOLDS_FOLDER_PATH))
+N_FOLDS = os.listdir(FOLDS_FOLDER_PATH)
 AUGMENTED_IMAGES = 20
 AUGMENTED_SUFFIX = "_AUG_"
 
@@ -87,12 +87,11 @@ iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].
 iCOPE_UNIFESP_data['keypoints_coordinates'] = iCOPE_UNIFESP_data['keypoints_coordinates'].apply(literal_eval)
 
 # Process each Fold for augmentation
-for fold in range(N_FOLDS):
-    logger.info(f"Augmenting Fold: {fold:02}")
-    fold_str = str(fold)
+for fold in N_FOLDS:
+    logger.info(f"Augmenting Fold: {fold}")
 
-    train_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold_str, 'Train')
-    test_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold_str, 'Test')
+    train_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold, 'Train')
+    test_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold, 'Test')
     create_folder(os.path.join(train_fold_path, 'Keypoints'))
     create_folder(os.path.join(test_fold_path, 'Keypoints'))
 
