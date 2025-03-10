@@ -1,0 +1,30 @@
+# config_VGGFace.yaml
+
+# Model to be trained
+model: VGGFace
+# Dataset path
+path_train: 'Datasets\Folds\0\Train'
+path_test: 'Datasets\Folds\0\Test'
+# Device configuration
+device: 'cuda'
+cache: True
+pin_memory: True
+num_workers: 0
+# Training Hyperparameters
+epochs: 100
+patience: 10
+batch_size: 16
+soft_label: 'None'
+label_smoothing: 0
+optimizer: RMSprop
+optimizer_hyp:
+  lr: 1.0e-05
+  weight_decay: 1.0e-05
+
+
+
+
+
+
+
+
