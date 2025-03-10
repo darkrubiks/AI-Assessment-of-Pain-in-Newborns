@@ -1,10 +1,10 @@
 """
-VGGNB.py
+VGGFace.py
 
 Author: Leonardo Antunes Ferreira
 Date:13/02/2023
 
-This file contains the VGGNB model implemented by:
+This file contains the VGGFace model implemented by:
 
 Leonardo A. Ferreira, University Center of FEI,São Bernardo do Campo SP,Brazil  
 Lucas P. Carlini, University Center of FEI,São Bernardo do Campo SP,Brazil  
@@ -22,9 +22,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class VGGNB(nn.Module):
+class VGGFace(nn.Module):
     def __init__(self) -> None:
-        super(VGGNB, self).__init__()
+        super(VGGFace, self).__init__()
 
         self.VGGFace = torch.load(os.path.join('models/weights','VGG_face_original_model.pt'))
 
