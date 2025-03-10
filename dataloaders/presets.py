@@ -64,7 +64,7 @@ class PresetTransform:
     Parameters
     ----------
     model_name : str
-        The name of the model architecture. Supported values are 'NCNN', 'VGGNB', and 'ViT'.
+        The name of the model architecture. Supported values are 'NCNN', 'VGGFace', and 'ViT'.
     """
 
     def __init__(self, model_name: str):
@@ -78,15 +78,15 @@ class PresetTransform:
                 transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
                 # CassiaWebFace normalization
-                transforms.Normalize(mean=[0.520, 0.404, 0.346],
-                                     std=[0.281, 0.244, 0.235])
+                #transforms.Normalize(mean=[0.520, 0.404, 0.346],
+                                     #std=[0.281, 0.244, 0.235])
             ])
-        elif self.model_name == 'VGGNB':
+        elif self.model_name == 'VGGFace':
             self.transforms = transforms.Compose([
                 transforms.Resize(224, interpolation=interpolation, antialias=True),
                 transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
-                # VGG-Face normalization
+                # VGGFace normalization
                 transforms.Normalize(mean=[0.367, 0.410, 0.506],
                                      std=[1, 1, 1])
             ])
