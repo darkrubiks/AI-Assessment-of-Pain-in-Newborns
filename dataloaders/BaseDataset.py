@@ -77,7 +77,7 @@ class BaseDataset(Dataset):
         img_path = self.img_paths[idx]
         image = Image.open(img_path).convert("RGB")
 
-        if self.model_name == 'VGGFace':
+        if self.model_name == 'VGGFACE':
             # For VGGFace, convert image mode as required.
             image = Image.fromarray(np.array(image)[:, :, ::-1])
 
