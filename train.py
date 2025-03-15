@@ -16,7 +16,6 @@ import logging
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.optim.lr_scheduler as schedulers
 from torch.utils.data import DataLoader
@@ -215,8 +214,8 @@ def main(config):
     #model.fc_4 = nn.Linear(5 * 5 * 64, 512)
     #model.output = nn.Linear(512, 10572)
 
-    #checkpoint = torch.load('models/NCNN_cassia.pth')
-    #model.load_state_dict(checkpoint['model_state_dict'])
+    #checkpoint = torch.load('models/weights/2025.03.10_checkpoint_NCNN.pth')
+    #model.load_state_dict(checkpoint['model'])
 
     #model.fc_4 = nn.Linear(5 * 5 * 64, 8)
     #model.output = nn.Linear(8, 1)
@@ -314,13 +313,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = load_config(args.config)
-
-    #if config['soft_label'] and config['label_smoothing'] !=0:
-        #print('Please dont use soft labels and label smoothing together!')
-        #print('Aborting...')
-        #exit(0)
         
-    if config['soft_label'] and config['label_smoothing'] !=0:
+    if config['soft_label'] != "None" and config['label_smoothing'] !=0:
         logger.error('Please dont use soft labels and label smoothing together!')
         exit(0)
 
