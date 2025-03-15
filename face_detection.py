@@ -18,7 +18,7 @@ import logging
 import cv2
 import pandas as pd
 from insightface.app import FaceAnalysis
-from utils import scale_coords
+from utils.utils import scale_coords
 
 # Configure native logging
 logging.basicConfig(
