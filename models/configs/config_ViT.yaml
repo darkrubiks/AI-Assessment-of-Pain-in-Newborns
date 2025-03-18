@@ -1,7 +1,7 @@
 # config_ViT.yaml
 
 # Model to be trained
-model: ViTNB
+model: ViT
 # Dataset path
 path_train: 'Datasets\Folds\1\Train'
 path_test: 'Datasets\Folds\1\Test'
