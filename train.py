@@ -314,7 +314,7 @@ if __name__ == '__main__':
 
     config = load_config(args.config)
         
-    if config['soft_label'] and config['label_smoothing'] !=0:
+    if config['soft_label'] != "None" and config['label_smoothing'] !=0:
         logger.error('Please dont use soft labels and label smoothing together!')
         exit(0)
 
