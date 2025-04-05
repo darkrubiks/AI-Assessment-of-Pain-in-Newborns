@@ -46,6 +46,28 @@ def scale_coords(x: int,
     return int(x), int(y)
 
 
+def resize_landmarks(landmarks: np.ndarray, 
+                     original_shape: tuple, 
+                     new_shape: tuple = (512, 512)) -> np.ndarray:
+    """
+    Resizes landmark coordinates from an original image coordinate system 
+    to a new coordinate system with shape new_shape.
+    """
+    orig_h, orig_w = original_shape
+    new_h, new_w = new_shape
+
+    # Calculate scale factors for x (width) and y (height)
+    scale_x = new_w / orig_w
+    scale_y = new_h / orig_h
+
+    # Apply the scaling to each coordinate.
+    resized_landmarks = np.empty_like(landmarks, dtype=np.float32)
+    resized_landmarks[:, 0] = landmarks[:, 0] * scale_x
+    resized_landmarks[:, 1] = landmarks[:, 1] * scale_y
+
+    return resized_landmarks
+
+
 def load_config(config_file: str) -> dict:
     """
     Loads a .yaml configuration file.

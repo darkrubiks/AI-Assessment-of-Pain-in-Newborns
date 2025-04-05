@@ -14,11 +14,12 @@ import os
 import pickle
 from shutil import rmtree
 import logging
+import numpy as np
 
 import cv2
 import pandas as pd
 from insightface.app import FaceAnalysis
-from utils.utils import scale_coords
+from utils.utils import scale_coords, resize_landmarks
 
 # Configure native logging
 logging.basicConfig(
@@ -91,9 +92,12 @@ for index, row in dataframe.iterrows():
         landmarks = face['landmark_2d_106'].astype('int')
         # Scale the landmarks based on the previous bbox, so it matches the facial image shape
         scaled_landmarks = [scale_coords(x, y, bbox) for x, y in landmarks]
-
+        
         x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
         cropped_face = img[y1:y2, x1:x2]
+
+        # Resize the landmarks to match the new image size
+        resized_landmarks = resize_landmarks(np.array(scaled_landmarks), cropped_face.shape[:2], (512, 512))
 
         cv2.imwrite(os.path.join(dataset_faces_path, file_name), cropped_face)
         face_coordinates.append(bbox.tolist())
@@ -101,7 +105,7 @@ for index, row in dataframe.iterrows():
 
         landmarks_file = os.path.join(dataset_landmarks_path, f'{file_name.split(".")[0]}.pkl')
         with open(landmarks_file, 'wb') as f:
-            pickle.dump(scaled_landmarks, f)
+            pickle.dump(resized_landmarks, f)
 
     except IndexError:
         logger.warning(f"No faces were detected on image {file_name}")
