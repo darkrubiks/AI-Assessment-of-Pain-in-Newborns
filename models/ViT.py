@@ -12,9 +12,9 @@ import torch.nn.functional as F
 from torchvision.models import vit_b_16
 
 
-class ViTNB(nn.Module):
+class ViT(nn.Module):
     def __init__(self) -> None:
-        super(ViTNB, self).__init__()
+        super(ViT, self).__init__()
 
         self.ViT = vit_b_16(weights='IMAGENET1K_V1')
 
