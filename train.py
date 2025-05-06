@@ -211,14 +211,15 @@ def main(config):
     model = getattr(models, config['model'])()
 
     # TODO pre trained NCNN
-    #model.fc_4 = nn.Linear(5 * 5 * 64, 512)
-    #model.output = nn.Linear(512, 10572)
+    checkpoint = torch.load('D:/Doutorado/Cassia Test/checkpoints_NCNN/checkpoint_99.pth', weights_only=False)
+    model.load_state_dict(checkpoint['model'])
 
-    #checkpoint = torch.load('models/weights/2025.03.10_checkpoint_NCNN.pth', weights_only=False)
-    #model.load_state_dict(checkpoint['model'])
-
-    #model.fc_4 = nn.Linear(5 * 5 * 64, 8)
-    #model.output = nn.Linear(8, 1)
+    model.classifier = nn.Sequential(
+            nn.Linear(5 * 5 * 64, 8),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(8, 1)
+        )
 
     model = model.to(config['device'])
 
