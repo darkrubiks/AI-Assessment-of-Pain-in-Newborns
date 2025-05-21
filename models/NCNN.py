@@ -10,7 +10,6 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class NCNN(nn.Module):
@@ -52,18 +51,11 @@ class NCNN(nn.Module):
             nn.Flatten()                    # -> [batch, 5*5*64]
         )
 
-        # --- Classifier head ---
+        # Classifier head
         self.classifier = nn.Sequential(
             nn.Linear(5 * 5 * 64, 8),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(8, num_classes)
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(5 * 5 * 64, 8),
-            nn.ReLU(),
-            nn.Dropout(0.1),
             nn.Linear(8, num_classes)
         )
 
@@ -76,12 +68,12 @@ class NCNN(nn.Module):
         # concatenate on channel dim
         x_cat = torch.cat([x_l, x_c, x_r], dim=1)
 
-        # merge path → 1600-dim features
+        # merge path → 8-dim features
         feats = self.merge_branch(x_cat)
 
         # final logit
         logits = self.classifier(feats)
-        return logits.view(-1)
+        return logits
 
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
