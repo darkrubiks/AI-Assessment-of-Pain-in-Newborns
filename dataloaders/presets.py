@@ -98,5 +98,14 @@ class PresetTransform:
                 transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
             ])
+        elif self.model_name == 'PAINCLASSIFIER':
+            self.transforms = transforms.Compose([
+                transforms.Resize(224, interpolation=interpolation, antialias=True),
+                transforms.PILToTensor(),
+                transforms.ConvertImageDtype(torch.float),
+                # VGG16 normalization
+                transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                     std=[0.5, 0.5, 0.5])
+            ])
         else:
             raise ValueError(f"Unknown model name: {self.model_name}")

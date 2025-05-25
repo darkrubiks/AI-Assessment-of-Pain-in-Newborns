@@ -210,19 +210,6 @@ def main(config):
     # Instantiate the model and send to device
     model = getattr(models, config['model'])()
 
-    # TODO pre trained NCNN
-    checkpoint = torch.load('D:/Doutorado/Cassia Test/checkpoints_NCNN/checkpoint_99.pth', weights_only=False)
-    model.load_state_dict(checkpoint['model'])
-
-    """
-    model.classifier = nn.Sequential(
-            nn.Linear(5 * 5 * 64, 8),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(8, 1)
-        )
-    """
-
     model = model.to(config['device'])
 
     # Define optimizer and scheduler (if any)
