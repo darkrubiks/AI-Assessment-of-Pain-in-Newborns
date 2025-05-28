@@ -1,7 +1,6 @@
 # NCNN.py
 
 # Author: Leonardo Antunes Ferreira
-# Refactored: ChatGPT
 # Date: 05/01/2025
 #
 # Based on:
@@ -13,8 +12,6 @@ import torch.nn as nn
 
 
 class NCNN(nn.Module):
-    """NCNN with a clear separation between feature-extractor and classifier,
-       but contained in a single class."""
     def __init__(self, num_classes: int = 1, dropout: float = 0.1) -> None:
         super().__init__()
         # --- Feature extractor ---
@@ -73,7 +70,7 @@ class NCNN(nn.Module):
 
         # final logit
         logits = self.classifier(feats)
-        return logits
+        return logits.view(-1)
 
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
