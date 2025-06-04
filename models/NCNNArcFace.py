@@ -1,0 +1,78 @@
+# NCNN.py
+
+# Author: Leonardo Antunes Ferreira
+# Refactored: ChatGPT
+# Date: 05/01/2025
+#
+# Based on:
+# G. Zamzmi et al., "Pain Assessment From Facial Expression: Neonatal Convolutional Neural Network (N-CNN)",
+# IEEE IJCNN 2019, doi:10.1109/IJCNN.2019.8851879
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class NCNNArcFace(nn.Module):
+    def __init__(self, num_classes: int = 1, dropout: float = 0.1) -> None:
+        super(NCNNArcFace, self).__init__()
+        # --- Feature extractor ---
+        # Left branch
+        self.left_branch = nn.Sequential(
+            nn.MaxPool2d(10, 10)
+        )
+
+        # Center branch
+        self.center_branch = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5),
+            nn.LeakyReLU(0.01),
+            nn.MaxPool2d(3, 3),
+            nn.Conv2d(64, 64, kernel_size=2),
+            nn.LeakyReLU(0.01),
+            nn.MaxPool2d(3, 3),
+            nn.Dropout(dropout)
+        )
+
+        # Right branch
+        self.right_branch = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=5, padding=2),
+            nn.LeakyReLU(0.01),
+            nn.MaxPool2d(10, 10),
+            nn.Dropout(dropout)
+        )
+
+        # Merge branch
+        # After concatenation, merge & reduce to an 8-dim vector
+        self.merge_branch = nn.Sequential(
+            nn.Conv2d(64 + 64 + 3, 64, kernel_size=2),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            nn.Flatten()                    # -> [batch, 5*5*64]
+        )
+
+        self.embeddings = nn.Sequential(
+            nn.Linear(5 * 5 * 64, num_classes, bias=False),
+            nn.BatchNorm1d(num_classes)
+        )
+        
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # run each branch
+        x_l = self.left_branch(x)
+        x_c = self.center_branch(x)
+        x_r = self.right_branch(x)
+
+        # concatenate on channel dim
+        x_cat = torch.cat([x_l, x_c, x_r], dim=1)
+
+        # merge path → 8-dim features
+        feats = self.merge_branch(x_cat)
+
+        # final logit
+        logits = self.embeddings(feats)
+        return logits
+
+
+    def predict(self, x: torch.Tensor) -> torch.Tensor:
+        """Returns sigmoid probabilities."""
+        return torch.sigmoid(self.forward(x))
