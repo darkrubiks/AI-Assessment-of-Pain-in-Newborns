@@ -1,0 +1,16 @@
+batch_size: 16
+cache: true
+device: cuda
+epochs: 100
+label_smoothing: 0
+model: NCNN
+num_workers: 0
+optimizer: Adam
+optimizer_hyp:
+  lr: 1.0e-05
+  weight_decay: 1.0e-05
+path_test: Datasets\Folds\0\Test
+path_train: Datasets\Folds\0\Train
+patience: 10
+pin_memory: true
+soft_label: None
