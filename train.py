@@ -210,16 +210,6 @@ def main(config):
     # Instantiate the model and send to device
     model = getattr(models, config['model'])()
 
-    # TODO pre trained NCNN
-    #model.fc_4 = nn.Linear(5 * 5 * 64, 512)
-    #model.output = nn.Linear(512, 10572)
-
-    #checkpoint = torch.load('models/weights/2025.03.10_checkpoint_NCNN.pth')
-    #model.load_state_dict(checkpoint['model'])
-
-    #model.fc_4 = nn.Linear(5 * 5 * 64, 8)
-    #model.output = nn.Linear(8, 1)
-
     model = model.to(config['device'])
 
     # Define optimizer and scheduler (if any)

@@ -33,7 +33,7 @@ def validation_metrics(preds: np.ndarray,
     -------
     metrics : a dictionary containing the metrics
     """
-    tn, fp, fn, tp = confusion_matrix(labels, preds).ravel()
+    tn, fp, fn, tp = confusion_matrix(labels, preds, labels=[0,1]).ravel()
 
     accuracy = (tp + tn) / (tp + fp + tn + fn)
     precision = tp / (tp + fp)
