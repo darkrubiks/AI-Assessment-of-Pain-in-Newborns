@@ -17,4 +17,4 @@ scheduler: CosineAnnealingLR
 scheduler_hyp:
   T_max: 20
   eta_min: 1.0e-06
-soft_label: step
+soft_label: None
