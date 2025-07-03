@@ -1,30 +1,20 @@
-# config_ViT.yaml
-
-# Model to be trained
-model: ViT
-# Dataset path
-path_train: 'Datasets\Folds\1\Train'
-path_test: 'Datasets\Folds\1\Test'
-# Device configuration
-device: 'cuda'
-cache: True
-pin_memory: True
-num_workers: 0
-# Training Hyperparameters
+batch_size: 64
+cache: true
+device: cuda
 epochs: 100
-patience: 10
-batch_size: 16
-soft_label: 'None'
 label_smoothing: 0
-optimizer: RMSprop
+model: ViT
+num_workers: 0
+optimizer: AdamW
 optimizer_hyp:
-  lr: 1.0e-04
+  lr: 0.0001
   weight_decay: 1.0e-05
-
-
-
-
-
-
-
-
+path_test: Datasets\Folds\4\Test
+path_train: Datasets\Folds\4\Train
+patience: 10
+pin_memory: true
+scheduler: CosineAnnealingLR
+scheduler_hyp:
+  T_max: 20
+  eta_min: 1.0e-06
+soft_label: None

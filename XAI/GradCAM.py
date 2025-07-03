@@ -81,7 +81,7 @@ class GradCAM:
                 self.gradients = grad.detach()
         output.register_hook(__store_grad)
 
-    def __reshape_transform(self, tensor, height=14, width=14):
+    def __reshape_transform(self, tensor, height=7, width=7):
         """
         Reshape transformer outputs (e.g., from ViT models) to 4D
         tensors with shape (B, C, height, width). This typically involves
