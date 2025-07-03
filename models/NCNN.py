@@ -1,4 +1,12 @@
 # NCNN.py
+# NCNN.py
+
+# Author: Leonardo Antunes Ferreira
+# Date: 05/01/2025
+#
+# Based on:
+# G. Zamzmi et al., "Pain Assessment From Facial Expression: Neonatal Convolutional Neural Network (N-CNN)",
+# IEEE IJCNN 2019, doi:10.1109/IJCNN.2019.8851879
 
 # Author: Leonardo Antunes Ferreira
 # Date: 05/01/2025
