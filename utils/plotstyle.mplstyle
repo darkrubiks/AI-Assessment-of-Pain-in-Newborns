@@ -42,7 +42,7 @@ lines.markeredgewidth : 0.5
 lines.antialiased     : True
 
 # —— Color Cycle ——
-axes.prop_cycle       : cycler('color', ['2E86AB', 'F29E4C', '2ECC71', '6A4C93'])
+axes.prop_cycle       : cycler('color', ['2E86AB', 'F29E4C', '2ECC71', '6A4C93', '1C1C1C'])
 
 # —— Legend & Spines ——
 legend.frameon        : False
