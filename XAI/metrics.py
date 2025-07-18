@@ -77,23 +77,15 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=Fal
     # For each region calculates the average pixel value, regions
     # with more importace will have larger values
     for region, region_mask in region_masks.items():
-        region_importance = np.mean(xai_mask * region_mask)
-        region_scores[region] = region_importance
-
-    total_score = sum(region_scores.values())
-
-    # Normalize the scores so it sums up to 1
-    normalized_scores = {}
-    for region, score in region_scores.items():
-        normalized_score = score / total_score
-        normalized_scores[region] = normalized_score
+        region_importance = np.sum(xai_mask * region_mask)
+        region_scores[region] = region_importance / np.sum(region_mask)
 
     # Sort the dictionary by values in ascending order
     if sort:
-        sorted_dict = dict(sorted(normalized_scores.items(), key=lambda item: item[1], reverse=True))
+        sorted_dict = dict(sorted(region_scores.items(), key=lambda item: item[1], reverse=True))
         return sorted_dict
     else:
-        return normalized_scores
+        return region_scores
 
 
 def create_face_regions_masks(keypoints: np.ndarray) -> dict:
@@ -138,14 +130,13 @@ def create_face_regions_masks(keypoints: np.ndarray) -> dict:
     right_nasolabial_fold = keypoints[[5, 4, 3, 77, 78, 79, 64, 52, 55]].astype(np.int32)
     left_nasolabial_fold = keypoints[[19, 20, 21, 58, 61, 68, 85, 84, 83]].astype(np.int32)
 
-    right_cheek = keypoints[[29, 30, 31, 32, 18, 19, 83, 82]].astype(np.int32)
-    left_cheek = keypoints[[13, 14, 15, 16, 2, 3, 77, 76]].astype(np.int32)
+    right_cheek = keypoints[[29, 30, 31, 32, 18, 19, 83, 82, 81, 89, 90, 87, 91, 93]].astype(np.int32)
+    left_cheek = keypoints[[13, 14, 15, 16, 2, 3, 77, 76, 75, 39, 37, 33, 36, 35]].astype(np.int32)
 
-    forehead_left = 2 * keypoints[1] - keypoints[[1, 9, 10, 11, 12, 13]]
-    forehead_right = 2 * keypoints[17] - keypoints[[29, 28, 27, 26, 25, 17]]
+    foreahead_ouline = keypoints[[43, 48, 49, 51, 50 ,102, 103, 104, 105,101]]
+    foread_y = keypoints[[101, 105, 104, 103, 102 ,50, 51, 49, 48,43]] + np.array([0, -90])
 
-    forehead = np.vstack((forehead_left.astype(np.int32),
-                         forehead_right.astype(np.int32)))
+    forehead = np.vstack((foreahead_ouline, foread_y)).astype(np.int32)
 
     outside = keypoints[[1, 9, 10, 11, 13, 14, 15, 16, 2, 3, 4, 5, 6, 7, 8, 0, 24, 23, 22, 21, 20, 19, 18, 32,
                          31, 30, 29, 28, 27, 26, 25, 17]].astype(np.int32)
