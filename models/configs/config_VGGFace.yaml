@@ -1,3 +1,5 @@
+seed: 1234
+save_dir: experiments/VGGFace
 batch_size: 16
 cache: true
 device: cuda
