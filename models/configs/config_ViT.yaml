@@ -1,10 +1,10 @@
 batch_size: 16
-cache: true
+cache: False
 device: cuda
 epochs: 100
 label_smoothing: 0.1
 model: ViT
-num_workers: 0
+num_workers: 12
 optimizer: RMSprop
 optimizer_hyp:
   lr: 0.0001
