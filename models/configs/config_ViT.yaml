@@ -1,16 +1,18 @@
 batch_size: 16
 cache: true
 device: cuda
-epochs: 100
-label_smoothing: 0
+epochs: 1
+label_smoothing: 0.1
 model: ViT
 num_workers: 0
 optimizer: RMSprop
 optimizer_hyp:
   lr: 0.0001
   weight_decay: 1.0e-05
-path_test: Datasets\Folds\4\Test
-path_train: Datasets\Folds\4\Train
+path_test: Datasets\Folds\3\Test
+path_train: Datasets\Folds\3\Train
 patience: 10
 pin_memory: true
+save_dir: experiments\ViT_B_32_ENSEMBLE_LS_01\ensemble_0
+seed: 1234
 soft_label: None
