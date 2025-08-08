@@ -1,7 +1,7 @@
 batch_size: 16
 cache: true
 device: cuda
-epochs: 1
+epochs: 100
 label_smoothing: 0.1
 model: ViT
 num_workers: 0
