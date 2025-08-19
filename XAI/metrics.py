@@ -80,20 +80,12 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=Fal
         region_importance = np.sum(xai_mask * region_mask)
         region_scores[region] = region_importance / np.sum(region_mask)
 
-    total_score = sum(region_scores.values())
-
-    # Normalize the scores so it sums up to 1
-    normalized_scores = {}
-    for region, score in region_scores.items():
-        normalized_score = score / total_score
-        normalized_scores[region] = normalized_score
-
     # Sort the dictionary by values in ascending order
     if sort:
-        sorted_dict = dict(sorted(normalized_scores.items(), key=lambda item: item[1], reverse=True))
+        sorted_dict = dict(sorted(region_scores.items(), key=lambda item: item[1], reverse=True))
         return sorted_dict
     else:
-        return normalized_scores
+        return region_scores
 
 
 def create_face_regions_masks(keypoints: np.ndarray) -> dict:
