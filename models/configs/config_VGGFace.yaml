@@ -1,5 +1,3 @@
-seed: 1234
-save_dir: experiments/VGGFace
 batch_size: 16
 cache: true
 device: cuda
@@ -11,8 +9,10 @@ optimizer: RMSprop
 optimizer_hyp:
   lr: 0.0001
   weight_decay: 1.0e-05
-path_test: Datasets\Folds\4\Test
-path_train: Datasets\Folds\4\Train
+path_test: Datasets\Folds\TrainAll\Test
+path_train: Datasets\Folds\TrainAll\Train
 patience: 10
 pin_memory: true
+save_dir: experiments/VGGFace_FINAL
+seed: 1234
 soft_label: None

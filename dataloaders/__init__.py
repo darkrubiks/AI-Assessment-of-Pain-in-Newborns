@@ -1,2 +1,3 @@
 from dataloaders.BaseDataset import BaseDataset
 from dataloaders.presets import PresetTransform, SoftLabel
+from dataloaders.iCOPEvidDataset import iCOPEVidDataset
