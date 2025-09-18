@@ -99,6 +99,15 @@ class BaseDataset(Dataset):
             if row is None:
                 raise ValueError(f"Label not found for {filename}")
             nfcs = row['NFCS'].values[0]
+            # TODO: Handle cases where NFCS is NaN or not found.
+            classe = filename.split('_')[-1].split('.')[0].lower()
+
+            if classe == 'pain' and nfcs < 3:
+                nfcs = 5
+
+            elif classe == 'nopain' and nfcs >= 3:
+                nfcs = 0
+           
             label = self.soft_labeler.get_soft_label(nfcs)
         else:
             # Binary labeling: 1 for 'pain', 0 otherwise.

@@ -65,7 +65,7 @@ transform = A.Compose(
             translate_percent=(-0.2, 0.2),
             rotate=(-30, 30),
             shear=(-10, 10),
-            mode=cv2.BORDER_REPLICATE,
+            border_mode=cv2.BORDER_REPLICATE,
             p=1.0,
         ),
         A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),

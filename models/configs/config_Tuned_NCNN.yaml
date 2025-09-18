@@ -1,6 +1,6 @@
 # config_NCNN.yaml
-
-# Model to be trained
+seed: 1234
+save_dir: experiments/NCNN
 model: NCNN
 # Dataset path
 path_train: 'Datasets\Folds\0\Train'

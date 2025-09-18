@@ -9,11 +9,13 @@ Code for training Deep Learning models.
 
 import argparse
 import os
+import random
 import shutil
 import time
 from datetime import datetime
 import logging
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -32,10 +34,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-
-# Get current directory and save directory
-ROOT = os.getcwd()
-SAVE_DIR = os.path.join(ROOT, 'experiments')
 
 
 def format_metrics(metrics, precision=4):
@@ -210,16 +208,6 @@ def main(config):
     # Instantiate the model and send to device
     model = getattr(models, config['model'])()
 
-    # TODO pre trained NCNN
-    #model.fc_4 = nn.Linear(5 * 5 * 64, 512)
-    #model.output = nn.Linear(512, 10572)
-
-    #checkpoint = torch.load('models/weights/2025.03.10_checkpoint_NCNN.pth')
-    #model.load_state_dict(checkpoint['model'])
-
-    #model.fc_4 = nn.Linear(5 * 5 * 64, 8)
-    #model.output = nn.Linear(8, 1)
-
     model = model.to(config['device'])
 
     # Define optimizer and scheduler (if any)
@@ -302,21 +290,37 @@ def main(config):
 
 
 if __name__ == '__main__':
-    # Set manual seed
-    torch.manual_seed(1234)
-
-    create_folder(SAVE_DIR)
-
     # Argument Parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, help='The config .yaml file')
     args = parser.parse_args()
 
+    # Load config file
     config = load_config(args.config)
-        
-    if config['soft_label'] != "None" and config['label_smoothing'] !=0:
-        logger.error('Please dont use soft labels and label smoothing together!')
+
+    # Check for soft label + label smoothing conflict
+    if config['soft_label'] != "None" and config['label_smoothing'] != 0:
+        logger.error('Please don’t use soft labels and label smoothing together!')
         exit(0)
 
+    # Set manual seed from config
+    if 'seed' in config:
+        torch.manual_seed(config['seed'])
+        np.random.seed(config['seed'])
+        random.seed(config['seed'])
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(config['seed'])
+        logger.info(f"Seed set to {config['seed']}")
+    else:
+        logger.warning("No 'seed' found in config, using random seed.")
+
+    # Define SAVE_DIR from config
+    if 'save_dir' in config:
+        SAVE_DIR = os.path.join(os.getcwd(), config['save_dir'])
+    else:
+        SAVE_DIR = os.path.join(os.getcwd(), 'experiments')
+        logger.warning(f"No 'save_dir' in config, using default: {SAVE_DIR}")
+
+    create_folder(SAVE_DIR)
 
     main(config)

@@ -73,12 +73,9 @@ class PresetTransform:
 
         if self.model_name == 'NCNN':
             self.transforms = transforms.Compose([
-                transforms.Resize(120, interpolation=interpolation, antialias=True),
+                transforms.Resize((120,120), interpolation=interpolation, antialias=True),
                 transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
-                # CassiaWebFace normalization
-                #transforms.Normalize(mean=[0.520, 0.404, 0.346],
-                                     #std=[0.281, 0.244, 0.235])
             ])
         elif self.model_name == 'VGGFACE':
             self.transforms = transforms.Compose([
