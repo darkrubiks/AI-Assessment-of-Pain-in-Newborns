@@ -73,7 +73,7 @@ class PresetTransform:
 
         if self.model_name == 'NCNN':
             self.transforms = transforms.Compose([
-                transforms.Resize(120, interpolation=interpolation, antialias=True),
+                transforms.Resize((120,120), interpolation=interpolation, antialias=True),
                 transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
             ])
