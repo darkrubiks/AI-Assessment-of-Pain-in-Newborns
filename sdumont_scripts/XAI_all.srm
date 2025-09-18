@@ -1,0 +1,41 @@
+#!/bin/bash
+#SBATCH --nodes=1           #Numero de Nos
+#SBATCH -p sequana_gpu      #Fila (partition) a ser utilizada
+#SBATCH -J NCNN_XAI
+#SBATCH --gpus 1
+#SBATCH --cpus-per-gpu 12
+#SBATCH --mem 94G
+#SBATCH --time 02:00:00
+
+
+
+
+#Exibe os nós alocados para o Job
+echo $SLURM_JOB_NODELIST
+nodeset -e $SLURM_JOB_NODELIST
+
+cd $SLURM_SUBMIT_DIR
+
+#Configura os Módulos
+module load anaconda3/2024.02_sequana
+
+#Ativa o ambiente conda
+source activate $SCRATCH/conda-env
+
+#Exibe as GPUs disponiveis 
+nvidia-smi
+
+#Verificando se está utilizando o python do local correto (ambiente conda)
+which python3
+
+cd $SCRATCH/AI-Assessment-of-Pain-in-Newborns
+
+(
+ while sleep 300; do
+	nvidia-smi
+	sstat -j $SLURM_JOB_ID --format=JobID,AveRSS,MaxRSS
+ done
+)&
+
+#Executa
+python sdumont.py
