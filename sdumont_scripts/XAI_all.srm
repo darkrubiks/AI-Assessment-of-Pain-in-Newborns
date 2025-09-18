@@ -7,9 +7,6 @@
 #SBATCH --mem 94G
 #SBATCH --time 02:00:00
 
-
-
-
 #Exibe os nós alocados para o Job
 echo $SLURM_JOB_NODELIST
 nodeset -e $SLURM_JOB_NODELIST
