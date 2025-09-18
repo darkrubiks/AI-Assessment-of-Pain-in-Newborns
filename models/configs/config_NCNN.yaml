@@ -1,4 +1,4 @@
-batch_size: 64
+batch_size: 16
 cache: true
 device: cuda
 epochs: 100
@@ -9,12 +9,10 @@ optimizer: RMSprop
 optimizer_hyp:
   lr: 0.0001
   weight_decay: 1.0e-05
-path_test: Datasets\Folds\4\Test
-path_train: Datasets\Folds\4\Train
+path_test: Datasets\Folds\TrainAll\Test
+path_train: Datasets\Folds\TrainAll\Train
 patience: 10
 pin_memory: true
-scheduler: CosineAnnealingLR
-scheduler_hyp:
-  T_max: 20
-  eta_min: 1.0e-06
-soft_label: step
+save_dir: experiments/NCNN_FINAL
+seed: 1234
+soft_label: None

@@ -95,6 +95,8 @@ python train.py --config models\configs\config_NCNN.yaml
 
 ## **Publications**
 
+* Ferreira, Leonardo A., et al. "Disclosing neonatal pain in real-time: AI-derived pain sign from continuous assessment of facial expressions." Computers in Biology and Medicine, 2025.
+
 * Carlini, Lucas P., et al. "Human vs machine towards neonatal pain assessment: A comprehensive analysis of the facial features extracted by health professionals, parents, and convolutional neural networks." Artificial Intelligence in Medicine, 2023.
 
 * Ferreira, Leonardo A., et al. "Revisiting N-CNN for Clinical Practice." International Workshop on PRedictive Intelligence In MEdicine. Cham: Springer Nature Switzerland, 2023.
