@@ -97,6 +97,6 @@ def create_folder(path):
     Tries to create a folder on the informed path.
     """
     try:
-        os.mkdir(path)
+        os.makedirs(path)
     except FileExistsError:
         pass

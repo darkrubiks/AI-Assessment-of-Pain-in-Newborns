@@ -41,7 +41,7 @@ class IntegratedGradients:
     """
     def __init__(self, model: torch.nn.Module, device: str = 'cpu', n_steps: int = 1) -> None:
         self.device = device
-        self.model = model.eval().to(self.device)
+        self.model = model.to(self.device)
         self.n_steps = n_steps
 
     def __interpolate_image(self, baseline: torch.Tensor, image: torch.Tensor) -> torch.Tensor:
@@ -93,7 +93,7 @@ class IntegratedGradients:
         for start in range(0, n_steps_plus_one, chunk_size):
             end = min(start + chunk_size, n_steps_plus_one)
             # Flatten the (chunk_size, B) dimensions into one.
-            chunk = images[start:end].reshape(-1, C, H, W).requires_grad_()
+            chunk = images[start:end].reshape(-1, C, H, W).detach().requires_grad_(True)
             
             outputs = self.model(chunk)
             outputs.sum().backward()

@@ -1,7 +1,7 @@
 # My signature Matplotlib style (Times New Roman)
 
 # —— Figure & DPI ——
-figure.figsize        : 8, 5
+figure.figsize        : 6, 6
 figure.dpi            : 100
 savefig.dpi           : 300
 figure.autolayout     : True
@@ -20,7 +20,7 @@ mathtext.fontset      : stix
 # —— Axes & Grid ——
 axes.edgecolor        : black
 axes.linewidth        : 1.0
-axes.grid             : True
+axes.grid             : False
 grid.color            : CCCCCC
 grid.linestyle        : --
 grid.linewidth        : 0.5
