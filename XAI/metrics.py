@@ -90,13 +90,13 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=Fal
 
 def create_face_regions_masks(keypoints: np.ndarray) -> dict:
     """
-    Creates regions masks based on 68 facial keypoints, for more
+    Creates regions masks based on 106 facial keypoints, for more
     information see https://github.com/nttstar/insightface-resources/blob/master/alignment/images/2d106markup.jpg
     or the publication https://doi.org/10.5753/wvc.2021.18914.
 
     Parameters
     ----------
-    keypoints : the 68 keypoints extracted from the face
+    keypoints : the 106 keypoints extracted from the face
 
     Returns
     -------
