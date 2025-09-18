@@ -35,13 +35,25 @@ def validation_metrics(preds: np.ndarray,
     """
     tn, fp, fn, tp = confusion_matrix(labels, preds, labels=[0,1]).ravel()
 
-    accuracy = (tp + tn) / (tp + fp + tn + fn)
-    precision = tp / (tp + fp)
-    sensitivity = tp / (tp + fn)  # also called recall in machine learning
-    specificity = tn / (fp + tn)
-    f1 = (2 * tp) / (2 * tp + fp + fn)
+    total = tp + fp + tn + fn
+    accuracy = (tp + tn) / total if total != 0 else np.nan
 
-    auc = roc_auc_score(labels, probs)
+    precision_den = tp + fp
+    precision = tp / precision_den if precision_den != 0 else 0.0  # undefined => 0.0
+
+    sensitivity_den = tp + fn
+    sensitivity = tp / sensitivity_den if sensitivity_den != 0 else 0.0  # aka recall
+
+    specificity_den = tn + fp
+    specificity = tn / specificity_den if specificity_den != 0 else 0.0
+
+    f1_den = 2 * tp + fp + fn
+    f1 = (2 * tp) / f1_den if f1_den != 0 else 0.0
+
+    try:
+        auc = roc_auc_score(labels, probs)
+    except ValueError:
+        auc = np.nan  # e.g., only one class present in labels
 
     metrics = {
         "Accuracy": accuracy,

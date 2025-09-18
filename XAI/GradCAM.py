@@ -43,7 +43,7 @@ class GradCAM:
                  device: str='cpu',
                  reshape_transform_ViT: bool=False) -> None:
         self.device = device
-        self.model = model.eval().to(self.device)
+        self.model = model.to(self.device)
         self.target_layer = target_layer
         self.activations = None
         self.gradients = None

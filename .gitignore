@@ -5,6 +5,7 @@ __pycache__
 Datasets/
 images/
 experiments/
+RGU/
 
 # ignore large models files
 models/weights
@@ -14,6 +15,5 @@ relatório.xlsx
 dataset_processing.py
 
 # ignore extensions
-/*.ipynb
 *.npy
 *.png

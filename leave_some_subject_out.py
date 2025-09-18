@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Constants
 FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
 DATASETS_FOLDER_PATH = os.path.join('Datasets', 'DatasetFaces')
-N_FOLDS = 5
+N_FOLDS = 10
 
 def copy_files(src_files, dst_folder):
     """
