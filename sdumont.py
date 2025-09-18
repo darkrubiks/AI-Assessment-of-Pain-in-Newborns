@@ -223,7 +223,7 @@ for exp in os.listdir(path_experiments):
     path_model = os.path.join(path_experiments, exp, "Model", "best_model.pt")
     path_yaml = os.path.join(path_experiments, exp, "Model", "config.yaml")
     config = load_config(path_yaml)
-    test_path = config["path_test"]
+    test_path = config["path_test"].replace("\\", "/")
 
     state_dict = torch.load(path_model, map_location=device)
     model.load_state_dict(state_dict)
