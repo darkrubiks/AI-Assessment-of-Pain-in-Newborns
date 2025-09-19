@@ -11,11 +11,7 @@ Example
 
 .. code-block:: bash
 
-    python crop_face_regions.py \
-        --images ./Datasets/DatasetFaces/Images \
-        --landmarks ./Datasets/DatasetFaces/Landmarks \
-        --output ./cropped_regions \
-        --square
+    python crop_facial_regions.py --images ./Datasets/DatasetFaces/Images --landmarks ./Datasets/DatasetFaces/Landmarks --output ./cropped_regions
 
 The command above will create one folder per region inside ``./cropped_regions``
 containing the cropped images. Passing ``--square`` expands each crop to the
@@ -239,7 +235,7 @@ def save_region_crop(
         return True
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    crop = cv2.resize(crop, (64,64))
+    crop = cv2.resize(crop, (128,128))
     success = cv2.imwrite(str(output_path), crop)
     if not success:
         LOGGER.error("Failed to write %s", output_path)
@@ -269,7 +265,7 @@ def build_region_masks(
         )
 
         kernel = np.ones((9, 9), np.uint8)  # k controls how many pixels to grow
-        expanded_mask = cv2.dilate(resized_mask, kernel, iterations=1)
+        expanded_mask = cv2.dilate(resized_mask, kernel, iterations=5)
 
         output_name = REGION_RENAMES.get(region_name, region_name)
         masks[output_name] = expanded_mask
