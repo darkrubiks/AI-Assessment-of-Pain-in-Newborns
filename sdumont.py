@@ -67,7 +67,7 @@ def make_feature_mask(img_tensor, n_segments=100):
 # ------------------------------------------------------------------------------
 
 device = 'cuda'
-model_name = 'ViT_B_32'
+model_name = 'VGGFace'
 path_experiments = os.path.join('experiments', model_name)
 
 # ------------------------------------------------------------------------------
