@@ -281,7 +281,6 @@ for exp in os.listdir(path_experiments):
             sensitivity_kwargs = dict(attr_kwargs)
             sensitivity_kwargs.update(spec_kwargs.get("sensitivity", {}))
             infidelity_kwargs = spec_kwargs.get("infidelity", {}).copy()
-            infidelity_kwargs.setdefault("normalize", True)
 
             attributions = explainer.attribute(method_ctx["input"], **attr_kwargs)
 
@@ -296,6 +295,7 @@ for exp in os.listdir(path_experiments):
                 perturb_fn,
                 method_ctx["input"],
                 attributions,
+                n_perturb_samples=30,
                 **infidelity_kwargs,
             )
 
