@@ -140,7 +140,7 @@ EXPLAINER_SPECS = [
             "prepare": lambda ctx: {
                 "attribute": {
                     "sliding_window_shapes": (3, 20, 20),
-                    "strides": (3, 10, 10),
+                    "strides": (3, 5, 5),
                 }
             },
         },
