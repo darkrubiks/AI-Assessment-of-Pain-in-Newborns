@@ -67,7 +67,7 @@ def make_feature_mask(img_tensor, n_segments=100):
 # ------------------------------------------------------------------------------
 
 device = 'cuda'
-model_name = 'NCNN'
+model_name = 'VGGFace'
 path_experiments = os.path.join('experiments', model_name)
 
 # ------------------------------------------------------------------------------
@@ -140,7 +140,7 @@ EXPLAINER_SPECS = [
             "prepare": lambda ctx: {
                 "attribute": {
                     "sliding_window_shapes": (3, 20, 20),
-                    "strides": (3, 10, 10),
+                    "strides": (3, 5, 5),
                 }
             },
         },
