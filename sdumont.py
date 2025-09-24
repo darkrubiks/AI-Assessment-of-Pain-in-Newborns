@@ -152,6 +152,9 @@ EXPLAINER_SPECS = [
             "postprocess": lambda attr, ctx: LayerAttribution.interpolate(
                 attr, ctx["target_shape"], interpolate_mode="bilinear"
             ).repeat(1, 3, 1, 1),
+            "prepare": lambda ctx: {
+                "relu_attributions": True,
+            }
         },
     ),
     (
