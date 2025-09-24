@@ -44,12 +44,12 @@ def rgb_to_gray_and_scale(x):
 
     sorted_vals = np.sort(np.abs(x_combined).flatten())
     cum_sums = np.cumsum(sorted_vals)
-    threshold_id: int = np.where(cum_sums >= cum_sums[-1] * 0.01 * 98)[0][0]
+    threshold_id: int = np.where(cum_sums >= cum_sums[-1] * 0.01 * 100)[0][0]
     threshold = sorted_vals[threshold_id]
 
     attr_norm = x_combined / threshold
     
-    return np.clip(attr_norm, 0, 1) # only positive for pain class
+    return np.clip(attr_norm, -1, 1)
 
 # --- Create superpixel feature mask for Captum ---
 def make_feature_mask(img_tensor, n_segments=100):
@@ -152,6 +152,9 @@ EXPLAINER_SPECS = [
             "postprocess": lambda attr, ctx: LayerAttribution.interpolate(
                 attr, ctx["target_shape"], interpolate_mode="bilinear"
             ).repeat(1, 3, 1, 1),
+            "prepare": lambda ctx: {
+                "relu_attributions": True,
+            }
         },
     ),
     (
