@@ -1,4 +1,4 @@
-from XAI.attribution_mask_processing import attribution_mask_processing
+from XAI.post_processing import *
 from XAI.RISE import RISE
 from XAI.IntegratedGradients import IntegratedGradients
 from XAI.GradCAM import GradCAM
