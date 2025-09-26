@@ -48,7 +48,7 @@ def rgb_to_gray_and_scale(x):
     threshold = sorted_vals[threshold_id]
 
     attr_norm = x_combined / threshold
-    
+
     return np.clip(attr_norm, -1, 1)
 
 # --- Create superpixel feature mask for Captum ---
@@ -67,8 +67,7 @@ def make_feature_mask(img_tensor, n_segments=100):
 # ------------------------------------------------------------------------------
 
 device = 'cuda'
-model_name = 'VGGFace'
-path_experiments = os.path.join('experiments', model_name)
+
 
 # ------------------------------------------------------------------------------
 
@@ -211,125 +210,129 @@ EXPLAINER_SPECS = [
 
 # main pipeline ----------------------------------------------------------------
 
-all_data = defaultdict(list)
+for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
 
-for exp in os.listdir(path_experiments):
-    if any(ext in exp for ext in (".pkl", "masks", ".png", ".pdf")):
-        continue
+    path_experiments = os.path.join('experiments', model_name)
 
-    experiment_cfg = resolve_experiment(exp, device)
-    if experiment_cfg is None:
-        continue
+    all_data = defaultdict(list)
 
-    model = experiment_cfg["model"]
-    img_size = experiment_cfg["img_size"]
-    transform = experiment_cfg["transform"]
-    layer = experiment_cfg["layer"]
+    for exp in os.listdir(path_experiments):
+        if any(ext in exp for ext in (".pkl", "masks", ".png", ".pdf")):
+            continue
 
-    path_model = os.path.join(path_experiments, exp, "Model", "best_model.pt")
-    path_yaml = os.path.join(path_experiments, exp, "Model", "config.yaml")
-    config = load_config(path_yaml)
-    test_path = config["path_test"].replace("\\", "/")
+        experiment_cfg = resolve_experiment(exp, device)
+        if experiment_cfg is None:
+            continue
 
-    state_dict = torch.load(path_model, map_location=device)
-    model.load_state_dict(state_dict)
-    model.eval()
+        model = experiment_cfg["model"]
+        img_size = experiment_cfg["img_size"]
+        transform = experiment_cfg["transform"]
+        layer = experiment_cfg["layer"]
 
-    explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
+        path_model = os.path.join(path_experiments, exp, "Model", "best_model.pt")
+        path_yaml = os.path.join(path_experiments, exp, "Model", "config.yaml")
+        config = load_config(path_yaml)
+        test_path = config["path_test"].replace("\\", "/")
 
-    image_files = [f for f in os.listdir(test_path) if f.lower().endswith(".jpg")]
-    for image_file in tqdm(image_files):
-        full_img_path = os.path.join(test_path, image_file)
+        state_dict = torch.load(path_model, map_location=device)
+        model.load_state_dict(state_dict)
+        model.eval()
 
-        img_rgb = Image.open(full_img_path).convert("RGB")
-        img_rgb = img_rgb.resize((img_size, img_size))
-        img_name = os.path.splitext(image_file)[0]
-        label = 1 if img_name.split("_")[3] == "pain" else 0
+        explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
 
-        if "VGGFace" in exp:
-            img_input = Image.fromarray(np.array(img_rgb)[:, :, ::-1])
-        else:
-            img_input = img_rgb
+        image_files = [f for f in os.listdir(test_path) if f.lower().endswith(".jpg")]
+        for image_file in tqdm(image_files):
+            full_img_path = os.path.join(test_path, image_file)
 
-        blurred_image = img_input.filter(ImageFilter.GaussianBlur(radius=5))
+            img_rgb = Image.open(full_img_path).convert("RGB")
+            img_rgb = img_rgb.resize((img_size, img_size))
+            img_name = os.path.splitext(image_file)[0]
+            label = 1 if img_name.split("_")[3] == "pain" else 0
 
-        transformed = transform(img_input)
-        transformed_blurred = transform(blurred_image)
+            if "VGGFace" in exp:
+                img_input = Image.fromarray(np.array(img_rgb)[:, :, ::-1])
+            else:
+                img_input = img_rgb
 
-        base_input = transformed.unsqueeze(0).to(device)
-        base_blurred = transformed_blurred.unsqueeze(0).to(device)
+            blurred_image = img_input.filter(ImageFilter.GaussianBlur(radius=5))
 
-        ctx_base = {
-            "device": device,
-            "target_shape": (img_size, img_size),
-            "input_base": base_input,
-            "blurred": base_blurred,
-        }
+            transformed = transform(img_input)
+            transformed_blurred = transform(blurred_image)
 
-        for XAI_name, spec in EXPLAINER_SPECS:
-            explainer = explainers[XAI_name]
+            base_input = transformed.unsqueeze(0).to(device)
+            base_blurred = transformed_blurred.unsqueeze(0).to(device)
 
-            method_ctx = dict(ctx_base)
-            method_ctx["input"] = (
-                ctx_base["input_base"].clone().detach().requires_grad_(True)
-            )
+            ctx_base = {
+                "device": device,
+                "target_shape": (img_size, img_size),
+                "input_base": base_input,
+                "blurred": base_blurred,
+            }
 
-            if XAI_name == "Lime" or XAI_name == "DeepLift":
+            for XAI_name, spec in EXPLAINER_SPECS:
+                explainer = explainers[XAI_name]
+
+                method_ctx = dict(ctx_base)
                 method_ctx["input"] = (
-                    ctx_base["input_base"].clone().detach().requires_grad_(True).contiguous()
-            )
+                    ctx_base["input_base"].clone().detach().requires_grad_(True)
+                )
 
-            spec_kwargs = spec.get("prepare", lambda ctx: {})(method_ctx)
-            attr_kwargs = spec_kwargs.get("attribute", {})
-            sensitivity_kwargs = dict(attr_kwargs)
-            sensitivity_kwargs.update(spec_kwargs.get("sensitivity", {}))
-            infidelity_kwargs = spec_kwargs.get("infidelity", {}).copy()
+                if XAI_name == "Lime" or XAI_name == "DeepLift":
+                    method_ctx["input"] = (
+                        ctx_base["input_base"].clone().detach().requires_grad_(True).contiguous()
+                )
 
-            attributions = explainer.attribute(method_ctx["input"], **attr_kwargs)
+                spec_kwargs = spec.get("prepare", lambda ctx: {})(method_ctx)
+                attr_kwargs = spec_kwargs.get("attribute", {})
+                sensitivity_kwargs = dict(attr_kwargs)
+                sensitivity_kwargs.update(spec_kwargs.get("sensitivity", {}))
+                infidelity_kwargs = spec_kwargs.get("infidelity", {}).copy()
 
-            if "postprocess" in spec:
-                attributions = spec["postprocess"](attributions, method_ctx)
+                attributions = explainer.attribute(method_ctx["input"], **attr_kwargs)
 
-            sens = sensitivity_max(
-                explainer.attribute, method_ctx["input"], **sensitivity_kwargs
-            )
-            infid = infidelity(
-                model,
-                perturb_fn,
-                method_ctx["input"],
-                attributions,
-                n_perturb_samples=30,
-                **infidelity_kwargs,
-            )
+                if "postprocess" in spec:
+                    attributions = spec["postprocess"](attributions, method_ctx)
 
-            attributions_np = (
-                attributions.squeeze(0)
-                .detach()
-                .cpu()
-                .numpy()
-                .transpose(1, 2, 0)
-            )
-            attributions_normalized = rgb_to_gray_and_scale(attributions_np)
+                sens = sensitivity_max(
+                    explainer.attribute, method_ctx["input"], **sensitivity_kwargs
+                )
+                infid = infidelity(
+                    model,
+                    perturb_fn,
+                    method_ctx["input"],
+                    attributions,
+                    n_perturb_samples=30,
+                    **infidelity_kwargs,
+                )
 
-            output_dir = os.path.join("RGU", model_name, XAI_name)
-            create_folder(output_dir)
-            output_path = os.path.join(output_dir, f"{img_name}.npz")
-            np.savez_compressed(output_path, mask=attributions_normalized)
+                attributions_np = (
+                    attributions.squeeze(0)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .transpose(1, 2, 0)
+                )
+                attributions_normalized = rgb_to_gray_and_scale(attributions_np)
 
-            all_data["img_path"].append(full_img_path)
-            all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
-            all_data["label"].append(label)
-            all_data["sensitivity"].append(float(sens))
-            all_data["infidelity"].append(float(infid))
-            all_data["mask_path"].append(output_path)
+                output_dir = os.path.join("RGU", model_name, XAI_name)
+                create_folder(output_dir)
+                output_path = os.path.join(output_dir, f"{img_name}.npz")
+                np.savez_compressed(output_path, mask=attributions_normalized)
 
-            with torch.no_grad():
-                probs = model.predict(ctx_base["input_base"])
-            pred = (probs >= 0.5).int()
-            all_data["probability"].append(float(probs))
-            all_data["prediction"].append(int(pred))
-            all_data["XAI_name"].append(XAI_name)
+                all_data["img_path"].append(full_img_path)
+                all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
+                all_data["label"].append(label)
+                all_data["sensitivity"].append(float(sens))
+                all_data["infidelity"].append(float(infid))
+                all_data["mask_path"].append(output_path)
 
-dataframe = pd.DataFrame(all_data)
-create_folder(os.path.join("RGU", model_name))
-dataframe.to_csv(os.path.join("RGU", model_name, "explainers.csv"), index=False)
+                with torch.no_grad():
+                    probs = model.predict(ctx_base["input_base"])
+                pred = (probs >= 0.5).int()
+                all_data["probability"].append(float(probs))
+                all_data["prediction"].append(int(pred))
+                all_data["XAI_name"].append(XAI_name)
+
+    dataframe = pd.DataFrame(all_data)
+    create_folder(os.path.join("RGU", model_name))
+    dataframe.to_csv(os.path.join("RGU", model_name, "explainers.csv"), index=False)
