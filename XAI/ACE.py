@@ -9,6 +9,7 @@ import torch
 from sklearn.cluster import KMeans
 from sklearn.linear_model import LogisticRegression
 from skimage.segmentation import slic
+from torch.nn import functional as F
 
 ArrayLike = Union[np.ndarray, torch.Tensor]
 
@@ -104,6 +105,8 @@ class ACE:
         self.model = model.to(self.device)
         self.model.eval()
 
+        self._disable_inplace_activations()
+
         self.preprocess = preprocess or _default_preprocess
         self.batch_size = batch_size
         self.activation_aggregator = activation_aggregator
@@ -112,6 +115,27 @@ class ACE:
         self._activation_grad: Optional[torch.Tensor] = None
         self._handles: List[torch.utils.hooks.RemovableHandle] = []
         self._register_hooks(target_layer)
+
+    def _disable_inplace_activations(self) -> None:
+        """Set ``inplace`` to ``False`` on modules that support it.
+
+        Many pretrained CNNs (e.g., VGG variants) rely on in-place activation
+        functions such as :class:`torch.nn.ReLU`. When ACE registers hooks on
+        intermediate layers, these in-place operations can overwrite the
+        tensors captured by the hooks, leading to autograd complaints about
+        views being modified in-place. To avoid this, the helper scans the
+        model and disables the in-place behaviour whenever possible.
+        """
+
+        for module in self.model.modules():
+            if hasattr(module, "inplace") and getattr(module, "inplace"):
+                try:
+                    module.inplace = False  # type: ignore[assignment]
+                except AttributeError:
+                    # Some modules expose ``inplace`` as a read-only property;
+                    # in that case we simply skip them.
+                    continue
+
 
     # ------------------------------------------------------------------
     # Hook utilities
@@ -126,13 +150,13 @@ class ACE:
             module = target_layer
 
         def forward_hook(_module: torch.nn.Module, _input: Tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
-            self._activation = output.detach()
+            self._activation = output.detach().clone()
 
         def backward_hook(
             _module: torch.nn.Module, _input: Tuple[torch.Tensor, ...], output_grad: Tuple[torch.Tensor, ...]
         ) -> None:
             grad = output_grad[0]
-            self._activation_grad = grad.detach()
+            self._activation_grad = grad.detach().clone()
 
         self._handles.append(module.register_forward_hook(forward_hook))
         self._handles.append(module.register_full_backward_hook(backward_hook))
@@ -277,6 +301,8 @@ class ACE:
         per_image_patch_ids: List[int] = []
         all_tensors: List[torch.Tensor] = []
 
+        target_spatial_size: Optional[Tuple[int, int]] = None
+
         for img_idx, image in enumerate(images):
             if not isinstance(image, np.ndarray):
                 raise TypeError("Images must be provided as numpy arrays when discovering concepts")
@@ -288,6 +314,15 @@ class ACE:
             patch_tensors = self._create_patch_tensors(image_tensor, masks)
             if patch_tensors.numel() == 0:
                 continue
+            if target_spatial_size is None:
+                target_spatial_size = patch_tensors.shape[-2:]
+            elif patch_tensors.shape[-2:] != target_spatial_size:
+                patch_tensors = F.interpolate(
+                    patch_tensors,
+                    size=target_spatial_size,
+                    mode="bilinear",
+                    align_corners=False,
+                )
             all_patch_masks.extend(masks)
             patch_image_indices.extend([img_idx] * len(masks))
             per_image_patch_ids.extend(list(range(len(masks))))

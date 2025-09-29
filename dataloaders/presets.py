@@ -79,10 +79,11 @@ class PresetTransform:
             ])
         elif self.model_name == 'VGGFACE':
             self.transforms = transforms.Compose([
-                transforms.Resize(224, interpolation=interpolation, antialias=True),
+                transforms.Resize((224,224), interpolation=interpolation, antialias=True),
                 transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
                 # VGGFace normalization
+                transforms.Lambda(lambda x: x[[2, 1, 0], ...]),
                 transforms.Normalize(mean=[0.367, 0.410, 0.506],
                                      std=[1, 1, 1])
             ])
