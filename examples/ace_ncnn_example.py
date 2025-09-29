@@ -7,6 +7,7 @@ from typing import Iterable, List
 
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 
 from models.NCNN import NCNN
 from XAI.ACE import ACE, Concept
@@ -58,6 +59,51 @@ def _save_masks(concepts: Iterable[Concept], output_dir: Path) -> None:
             np.save(mask_path, patch.mask)
 
 
+def _plot_concepts(
+    concepts: Iterable[Concept],
+    discovery_images: List[np.ndarray],
+    output_dir: Path,
+    *,
+    max_examples: int = 4,
+    overlay_alpha: float = 0.6,
+) -> None:
+    """Render PNG visualisations of each concept's most central patches."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    red_overlay = np.array([255.0, 0.0, 0.0], dtype=np.float32)
+
+    for concept in concepts:
+        if not concept.patches:
+            continue
+
+        top_patches = concept.patches[:max_examples]
+        rows = len(top_patches)
+        fig, axes = plt.subplots(rows, 2, figsize=(6, 3 * rows), squeeze=False)
+
+        for row, patch in enumerate(top_patches):
+            original = discovery_images[patch.image_index]
+            mask = patch.mask.astype(bool)
+
+            highlight = original.astype(np.float32).copy()
+            highlight[mask] = (
+                highlight[mask] * (1.0 - overlay_alpha) + red_overlay * overlay_alpha
+            )
+            highlight = np.clip(highlight, 0, 255).astype(np.uint8)
+
+            axes[row, 0].imshow(original)
+            axes[row, 0].set_title(f"Image {patch.image_index} – patch {patch.patch_index}")
+            axes[row, 1].imshow(highlight)
+            axes[row, 1].set_title("Highlighted concept region")
+
+            for ax in axes[row]:
+                ax.axis("off")
+
+        fig.suptitle(f"Concept {concept.concept_id}")
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig.savefig(output_dir / f"concept_{concept.concept_id}.png", dpi=150)
+        plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="ACE demo on the NCNN model")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -90,8 +136,13 @@ def main() -> None:
     for concept_id, score in sorted(scores.items()):
         print(f"Concept {concept_id}: TCAV score = {score:.3f}")
 
-    _save_masks(result.concepts.values(), args.output)
-    print(f"Saved example masks into {args.output}")
+    mask_dir = args.output / "masks"
+    _save_masks(result.concepts.values(), mask_dir)
+    print(f"Saved example masks into {mask_dir}")
+
+    plot_dir = args.output / "plots"
+    _plot_concepts(result.concepts.values(), discovery_images, plot_dir)
+    print(f"Rendered concept visualisations into {plot_dir}")
 
     ace.close()
 

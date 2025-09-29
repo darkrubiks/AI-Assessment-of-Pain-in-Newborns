@@ -90,7 +90,8 @@ python train.py --config models\configs\config_NCNN.yaml
 The repository bundles a runnable example that demonstrates how to execute the
 PyTorch ACE pipeline with the [`NCNN`](models/NCNN.py) architecture. The script
 creates a small synthetic dataset, discovers concepts, trains CAVs, and reports
-TCAV scores while storing a few example masks on disk.
+TCAV scores while storing a few example masks on disk alongside PNG plots that
+highlight the most representative patches for each concept.
 
 ```bash
 python examples/ace_ncnn_example.py --device cpu
@@ -99,7 +100,24 @@ python examples/ace_ncnn_example.py --device cpu
 Use `--num-images` to control how many synthetic samples feed the discovery
 phase or `--num-concepts` to tune the number of clusters. When a CUDA-capable
 GPU is available you can omit `--device cpu` and the script will automatically
-run on GPU.
+run on GPU. The example writes outputs under `ace_outputs/` by default: masks
+are saved to `ace_outputs/masks/` and visualisations to `ace_outputs/plots/`.
+
+### **ACE concept discovery with any PyTorch CNN**
+
+For a fully self-contained PyTorch workflow, use the
+[`examples/ace_pytorch_example.py`](examples/ace_pytorch_example.py) script. It
+generates a synthetic shapes dataset, trains a lightweight convolutional
+network, runs the ACE pipeline, and saves both NumPy masks and concept
+visualisation grids for inspection.
+
+```bash
+python examples/ace_pytorch_example.py --device cpu
+```
+
+Adjust `--train-samples`, `--epochs`, or `--num-concepts` to explore different
+regimes. Results are exported to `ace_pytorch_outputs/` with plots stored under
+`ace_pytorch_outputs/concept_plots/`.
 
 ## **Models**
 
