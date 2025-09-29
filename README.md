@@ -106,6 +106,23 @@ will automatically run on GPU. The example writes outputs under `ace_outputs/`
 by default: masks are saved to `ace_outputs/masks/` and visualisations to
 `ace_outputs/plots/`.
 
+### **ACE concept discovery with VGGFace**
+
+To analyse concepts discovered inside the [`VGGFace`](models/VGGFace.py)
+backbone, run the dedicated example which hooks into the
+`VGGFace.features.conv5_3` layer used by the neonatal pain classifier. The
+script expects access to the pre-trained `VGG_face_original_model.pt` weights.
+
+```bash
+python examples/ace_vggface_example.py --device cpu --discovery-samples 24 --eval-samples 12 \
+    --weights models/weights/VGG_face_original_model.pt
+```
+
+Override `--weights` if the checkpoint lives elsewhere, and use
+`--dataset-dir` to point at a different image repository. Outputs default to
+`ace_vggface_outputs/` with NumPy masks stored under `ace_vggface_outputs/masks/`
+and mosaic visualisations under `ace_vggface_outputs/plots/`.
+
 ### **ACE concept discovery with any PyTorch CNN**
 
 For a fully self-contained PyTorch workflow, use the
