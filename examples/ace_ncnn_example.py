@@ -5,6 +5,8 @@ import argparse
 from pathlib import Path
 from typing import Iterable, List
 
+import math
+
 import torch
 from matplotlib import pyplot as plt
 
@@ -39,39 +41,38 @@ def _plot_concepts(
     discovery_images: List[np.ndarray],
     output_dir: Path,
     *,
-    max_examples: int = 4,
-    overlay_alpha: float = 0.6,
+    max_examples: int = 9,
 ) -> None:
-    """Render PNG visualisations of each concept's most central patches."""
+    """Render PNG mosaics showing the raw patches for each concept."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    red_overlay = np.array([255.0, 0.0, 0.0], dtype=np.float32)
 
     for concept in concepts:
         if not concept.patches:
             continue
 
         top_patches = concept.patches[:max_examples]
-        rows = len(top_patches)
-        fig, axes = plt.subplots(rows, 2, figsize=(6, 3 * rows), squeeze=False)
+        n_patches = len(top_patches)
+        cols = min(3, n_patches)
+        rows = math.ceil(n_patches / cols)
+        fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows))
+        axes = np.atleast_2d(axes)
 
-        for row, patch in enumerate(top_patches):
+        for idx, patch in enumerate(top_patches):
+            row, col = divmod(idx, cols)
             original = discovery_images[patch.image_index]
             mask = patch.mask.astype(bool)
+            patch_only = np.zeros_like(original)
+            patch_only[mask] = original[mask]
 
-            highlight = original.astype(np.float32).copy()
-            highlight[mask] = (
-                highlight[mask] * (1.0 - overlay_alpha) + red_overlay * overlay_alpha
-            )
-            highlight = np.clip(highlight, 0, 255).astype(np.uint8)
+            ax = axes[row, col]
+            ax.imshow(patch_only)
+            ax.set_title(f"Img {patch.image_index} – patch {patch.patch_index}")
+            ax.axis("off")
 
-            axes[row, 0].imshow(original)
-            axes[row, 0].set_title(f"Image {patch.image_index} – patch {patch.patch_index}")
-            axes[row, 1].imshow(highlight)
-            axes[row, 1].set_title("Highlighted concept region")
-
-            for ax in axes[row]:
-                ax.axis("off")
+        for idx in range(n_patches, rows * cols):
+            row, col = divmod(idx, cols)
+            axes[row, col].axis("off")
 
         fig.suptitle(f"Concept {concept.concept_id}")
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])

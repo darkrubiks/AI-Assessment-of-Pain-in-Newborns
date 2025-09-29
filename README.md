@@ -91,7 +91,7 @@ The repository bundles a runnable example that demonstrates how to execute the
 PyTorch ACE pipeline with the [`NCNN`](models/NCNN.py) architecture. The script
 samples neonatal face images from `Datasets/DatasetsFaces/Images`, discovers
 concepts, trains CAVs, and reports TCAV scores while storing a few example
-masks on disk alongside PNG plots that highlight the most representative
+masks on disk alongside PNG mosaics that visualise the most representative
 patches for each concept.
 
 ```bash
@@ -112,8 +112,8 @@ For a fully self-contained PyTorch workflow, use the
 [`examples/ace_pytorch_example.py`](examples/ace_pytorch_example.py) script. It
 draws stratified subsets of the neonatal face dataset for training,
 concept-discovery, and evaluation, fits a lightweight convolutional network,
-runs the ACE pipeline, and saves both NumPy masks and concept visualisation
-grids for inspection.
+runs the ACE pipeline, and saves both NumPy masks and concept patch mosaics for
+inspection.
 
 ```bash
 python examples/ace_pytorch_example.py --device cpu --train-samples 192 --discovery-samples 32 --eval-samples 32
