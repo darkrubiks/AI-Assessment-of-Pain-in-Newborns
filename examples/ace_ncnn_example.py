@@ -1,14 +1,17 @@
-"""Run the ACE concept discovery pipeline on the NCNN model."""
+"""Run the ACE concept discovery pipeline on the NCNN model using real images."""
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 from typing import Iterable, List
 
-import numpy as np
 import torch
 from matplotlib import pyplot as plt
 
+import numpy as np
+
+from dataloaders.presets import PresetTransform
+from examples._dataset_utils import collect_image_paths, load_numpy_images, select_image_subsets
 from models.NCNN import NCNN
 from XAI.ACE import ACE, Concept
 
@@ -21,34 +24,6 @@ class NCNNForACE(NCNN):
         if logits.ndim == 1:
             logits = logits.unsqueeze(-1)
         return logits
-
-
-def _make_synthetic_image(seed: int, size: int = 100) -> np.ndarray:
-    """Create a simple RGB image with geometric patterns for ACE to segment."""
-
-    rng = np.random.default_rng(seed)
-    image = np.zeros((size, size, 3), dtype=np.float32)
-
-    # Background gradient
-    xs = np.linspace(0.0, 1.0, size, dtype=np.float32)
-    image[..., 0] = xs[None, :]
-    image[..., 1] = xs[:, None]
-
-    # Add coloured rectangles so SLIC can find diverse patches
-    for _ in range(5):
-        h = rng.integers(size // 8, size // 3)
-        w = rng.integers(size // 8, size // 3)
-        top = rng.integers(0, size - h)
-        left = rng.integers(0, size - w)
-        colour = rng.uniform(0.2, 0.9, size=3).astype(np.float32)
-        image[top : top + h, left : left + w] = colour
-
-    # Convert to uint8 style range [0, 255]
-    return np.clip(image * 255.0, 0, 255).astype(np.uint8)
-
-
-def _generate_dataset(num_images: int, size: int = 100) -> List[np.ndarray]:
-    return [_make_synthetic_image(seed=i, size=size) for i in range(num_images)]
 
 
 def _save_masks(concepts: Iterable[Concept], output_dir: Path) -> None:
@@ -107,13 +82,34 @@ def _plot_concepts(
 def main() -> None:
     parser = argparse.ArgumentParser(description="ACE demo on the NCNN model")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--num-images", type=int, default=12, help="Number of discovery images")
+    parser.add_argument(
+        "--dataset-dir",
+        type=Path,
+        default=Path("Datasets") / "DatasetsFaces" / "Images",
+        help="Directory containing the face images (expects *_pain/*.jpg naming)",
+    )
+    parser.add_argument("--discovery-samples", type=int, default=24, help="Number of images for concept discovery")
+    parser.add_argument("--eval-samples", type=int, default=12, help="Number of images for TCAV scoring")
     parser.add_argument("--num-concepts", type=int, default=3, help="Number of ACE clusters")
     parser.add_argument("--output", type=Path, default=Path("ace_outputs"), help="Directory for saved masks")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for dataset sampling")
     args = parser.parse_args()
 
-    discovery_images = _generate_dataset(args.num_images)
-    evaluation_images = _generate_dataset(4)
+    transform = PresetTransform("NCNN").transform
+    image_paths = collect_image_paths(args.dataset_dir)
+    discovery_paths, evaluation_paths = select_image_subsets(
+        image_paths,
+        [args.discovery_samples, args.eval_samples],
+        seed=args.seed,
+    )
+
+    print(
+        f"Loaded {len(image_paths)} images from {args.dataset_dir}. "
+        f"Using {len(discovery_paths)} for discovery and {len(evaluation_paths)} for TCAV scoring."
+    )
+
+    discovery_images = load_numpy_images(discovery_paths, transform)
+    evaluation_images = load_numpy_images(evaluation_paths, transform)
 
     model = NCNNForACE(num_classes=1)
     ace = ACE(model, target_layer=model.merge_branch, device=args.device, batch_size=8)

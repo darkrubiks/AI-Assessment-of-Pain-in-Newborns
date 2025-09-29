@@ -97,3 +97,9 @@ class PresetTransform:
             ])
         else:
             raise ValueError(f"Unknown model name: {self.model_name}")
+
+    @property
+    def transform(self):
+        """Alias exposing the composed torchvision transform."""
+
+        return self.transforms

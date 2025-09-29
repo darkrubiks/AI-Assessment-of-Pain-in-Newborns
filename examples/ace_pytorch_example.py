@@ -1,22 +1,30 @@
-"""Standalone ACE example using a small PyTorch CNN and synthetic data."""
+"""ACE example that trains a tiny CNN on face images stored on disk."""
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Iterable, List, Sequence, Tuple
+from typing import Iterable, List, Sequence
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
+import numpy as np
+
+from dataloaders.presets import PresetTransform
+from examples._dataset_utils import (
+    FaceImageDataset,
+    collect_image_paths,
+    load_numpy_images,
+    select_image_subsets,
+)
 from XAI.ACE import ACE, Concept
 
 
 class TinyConvNet(nn.Module):
-    """A compact CNN that works well on the synthetic shapes dataset."""
+    """A compact CNN suited for small binary pain classification experiments."""
 
     def __init__(self, num_classes: int = 2) -> None:
         super().__init__()
@@ -36,66 +44,14 @@ class TinyConvNet(nn.Module):
         return self.classifier(x)
 
 
-def generate_shapes_dataset(
-    num_samples: int,
-    *,
-    seed: int,
-    image_size: int = 64,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Create labelled RGB images containing squares on the left or right side."""
-
-    rng = np.random.default_rng(seed)
-    images = np.zeros((num_samples, image_size, image_size, 3), dtype=np.uint8)
-    labels = np.zeros(num_samples, dtype=np.int64)
-
-    x_grad = np.linspace(10.0, 80.0, image_size, dtype=np.float32)
-    y_grad = np.linspace(60.0, 5.0, image_size, dtype=np.float32)
-
-    for idx in range(num_samples):
-        canvas = rng.uniform(0.0, 20.0, size=(image_size, image_size, 3)).astype(np.float32)
-        canvas[..., 0] += x_grad[None, :]
-        canvas[..., 1] += y_grad[:, None]
-        canvas[..., 2] += x_grad[::-1][None, :]
-
-        square_size = int(rng.integers(image_size // 6, image_size // 3))
-        top = int(rng.integers(2, image_size - square_size - 2))
-        left = int(rng.integers(2, image_size - square_size - 2))
-        colour = rng.uniform(120.0, 240.0, size=3)
-        canvas[top : top + square_size, left : left + square_size] = colour
-
-        # Class 1 squares live on the right side of the canvas.
-        square_center_x = left + square_size / 2.0
-        labels[idx] = int(square_center_x >= image_size / 2.0)
-
-        stripe_width = int(rng.integers(2, 4))
-        stripe_colour = rng.uniform(40.0, 160.0, size=3)
-        if rng.random() < 0.5:
-            x = int(rng.integers(0, image_size - stripe_width))
-            canvas[:, x : x + stripe_width] = stripe_colour
-        else:
-            y = int(rng.integers(0, image_size - stripe_width))
-            canvas[y : y + stripe_width, :] = stripe_colour
-
-        noise = rng.normal(0.0, 4.0, size=canvas.shape)
-        noisy = np.clip(canvas + noise, 0.0, 255.0)
-        images[idx] = noisy.astype(np.uint8)
-
-    return images, labels
-
-
 def train_model(
     model: TinyConvNet,
-    images: np.ndarray,
-    labels: np.ndarray,
+    dataset: FaceImageDataset,
     *,
     device: str,
     epochs: int,
     batch_size: int = 32,
 ) -> None:
-    dataset = TensorDataset(
-        torch.from_numpy(images).permute(0, 3, 1, 2).float() / 255.0,
-        torch.from_numpy(labels),
-    )
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     criterion = nn.CrossEntropyLoss()
@@ -125,17 +81,22 @@ def train_model(
     model.eval()
 
 
-def evaluate_accuracy(model: TinyConvNet, images: np.ndarray, labels: np.ndarray, device: str) -> float:
-    dataset = torch.from_numpy(images).permute(0, 3, 1, 2).float() / 255.0
-    labels_tensor = torch.from_numpy(labels)
+def evaluate_accuracy(model: TinyConvNet, dataset: FaceImageDataset, device: str) -> float:
+    loader = DataLoader(dataset, batch_size=32, shuffle=False)
     device_obj = torch.device(device)
 
     model.eval()
     with torch.no_grad():
-        logits = model(dataset.to(device_obj))
-        predictions = logits.argmax(dim=1).cpu()
-    accuracy = (predictions == labels_tensor).float().mean().item()
-    return float(accuracy)
+        correct = 0
+        total = 0
+        for images, labels in loader:
+            logits = model(images.to(device_obj))
+            predictions = logits.argmax(dim=1).cpu()
+            correct += int((predictions == labels).sum().item())
+            total += int(labels.size(0))
+    if total == 0:
+        return 0.0
+    return correct / total
 
 
 def plot_concepts(
@@ -186,34 +147,56 @@ def plot_concepts(
 def main() -> None:
     parser = argparse.ArgumentParser(description="End-to-end ACE demo with a PyTorch CNN")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--train-samples", type=int, default=240, help="Number of training images")
-    parser.add_argument("--discovery-samples", type=int, default=24, help="Images used for concept discovery")
-    parser.add_argument("--eval-samples", type=int, default=24, help="Images used for TCAV scoring")
+    parser.add_argument(
+        "--dataset-dir",
+        type=Path,
+        default=Path("Datasets") / "DatasetsFaces" / "Images",
+        help="Directory containing the face images (expects *_pain/*.jpg naming)",
+    )
+    parser.add_argument("--train-samples", type=int, default=192, help="Number of training images")
+    parser.add_argument("--discovery-samples", type=int, default=32, help="Images used for concept discovery")
+    parser.add_argument("--eval-samples", type=int, default=32, help="Images used for TCAV scoring")
     parser.add_argument("--epochs", type=int, default=12, help="Training epochs for the tiny CNN")
     parser.add_argument("--num-concepts", type=int, default=5, help="Number of ACE clusters")
     parser.add_argument("--output", type=Path, default=Path("ace_pytorch_outputs"), help="Directory for artefacts")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for dataset splits")
     args = parser.parse_args()
 
-    print("Preparing synthetic datasets...")
-    train_images, train_labels = generate_shapes_dataset(args.train_samples, seed=0)
-    discovery_images, _ = generate_shapes_dataset(args.discovery_samples, seed=1)
-    evaluation_images, evaluation_labels = generate_shapes_dataset(args.eval_samples, seed=2)
+    transform = PresetTransform("NCNN").transform
+    dataset_dir = args.dataset_dir
+    image_paths = collect_image_paths(dataset_dir)
+
+    train_paths, discovery_paths, evaluation_paths = select_image_subsets(
+        image_paths,
+        [args.train_samples, args.discovery_samples, args.eval_samples],
+        seed=args.seed,
+    )
+
+    print(
+        f"Loaded {len(image_paths)} images from {dataset_dir}. "
+        f"Using {len(train_paths)} for training, {len(discovery_paths)} for concept discovery, "
+        f"and {len(evaluation_paths)} for TCAV scoring."
+    )
+
+    train_dataset = FaceImageDataset(train_paths, transform)
+    evaluation_dataset = FaceImageDataset(evaluation_paths, transform)
+    discovery_images = load_numpy_images(discovery_paths, transform)
+    evaluation_images = load_numpy_images(evaluation_paths, transform)
 
     model = TinyConvNet(num_classes=2)
-    print("Training the CNN on the synthetic task...")
-    train_model(model, train_images, train_labels, device=args.device, epochs=args.epochs)
+    print("Training the CNN on the neonatal pain dataset subset...")
+    train_model(model, train_dataset, device=args.device, epochs=args.epochs)
 
-    train_acc = evaluate_accuracy(model, train_images, train_labels, device=args.device)
-    eval_acc = evaluate_accuracy(model, evaluation_images, evaluation_labels, device=args.device)
+    train_acc = evaluate_accuracy(model, train_dataset, device=args.device)
+    eval_acc = evaluate_accuracy(model, evaluation_dataset, device=args.device)
     print(f"Training accuracy: {train_acc:.3f}")
     print(f"Evaluation accuracy: {eval_acc:.3f}")
 
     ace = ACE(model, target_layer=model.conv3, device=args.device, batch_size=16)
 
-    discovery_list = [img for img in discovery_images]
     print("Discovering concepts...")
     result = ace.discover_concepts(
-        discovery_list,
+        discovery_images,
         n_segments=12,
         compactness=8.0,
         sigma=1.0,
@@ -225,14 +208,13 @@ def main() -> None:
     print("Training CAVs...")
     ace.train_cavs(result, random_sample_size=80, random_state=0)
 
-    evaluation_list = [img for img in evaluation_images]
     print("Scoring concepts with TCAV...")
-    scores = ace.score_concepts(result, evaluation_list, class_index=1)
+    scores = ace.score_concepts(result, evaluation_images, class_index=1)
     for concept_id, score in sorted(scores.items()):
         print(f"Concept {concept_id}: TCAV score = {score:.3f}")
 
     plot_dir = args.output / "concept_plots"
-    plot_concepts(result.concepts.values(), discovery_list, plot_dir)
+    plot_concepts(result.concepts.values(), discovery_images, plot_dir)
     print(f"Saved concept visualisations to {plot_dir}")
 
     mask_dir = args.output / "masks"
