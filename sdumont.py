@@ -317,7 +317,7 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
                 output_dir = os.path.join("RGU", model_name, XAI_name)
                 create_folder(output_dir)
                 output_path = os.path.join(output_dir, f"{img_name}.npz")
-                np.savez_compressed(output_path, mask=attributions_normalized)
+                np.savez_compressed(output_path, mask=attributions_normalized, mask_raw=attributions_np)
 
                 all_data["img_path"].append(full_img_path)
                 all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
