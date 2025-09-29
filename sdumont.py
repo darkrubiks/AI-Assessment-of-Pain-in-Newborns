@@ -44,7 +44,7 @@ def rgb_to_gray_and_scale(x):
 
     sorted_vals = np.sort(np.abs(x_combined).flatten())
     cum_sums = np.cumsum(sorted_vals)
-    threshold_id: int = np.where(cum_sums >= cum_sums[-1] * 0.01 * 100)[0][0]
+    threshold_id: int = np.where(cum_sums >= cum_sums[-1] * 0.01 * 98)[0][0]
     threshold = sorted_vals[threshold_id]
 
     attr_norm = x_combined / threshold
