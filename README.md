@@ -85,6 +85,22 @@ Inside the `.yaml` file you can choose any optimizer from PyTorch and set its hy
 python train.py --config models\configs\config_NCNN.yaml
 ```
 
+### **ACE concept discovery with NCNN**
+
+The repository bundles a runnable example that demonstrates how to execute the
+PyTorch ACE pipeline with the [`NCNN`](models/NCNN.py) architecture. The script
+creates a small synthetic dataset, discovers concepts, trains CAVs, and reports
+TCAV scores while storing a few example masks on disk.
+
+```bash
+python examples/ace_ncnn_example.py --device cpu
+```
+
+Use `--num-images` to control how many synthetic samples feed the discovery
+phase or `--num-concepts` to tune the number of clusters. When a CUDA-capable
+GPU is available you can omit `--device cpu` and the script will automatically
+run on GPU.
+
 ## **Models**
 
 | **Model**                | **Accuracy** | **Precision** | **Recall** | **F1**     | **Trained On**|
