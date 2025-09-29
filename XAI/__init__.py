@@ -5,3 +5,4 @@ from XAI.GradCAM import GradCAM
 from XAI.FeatureMaps import FeatureMaps
 from XAI.attention_rollout import VITAttentionRollout
 from XAI.metrics import *
+from XAI.ACE import ACE, ACEResult, Concept, ConceptPatch
