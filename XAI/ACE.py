@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 from sklearn.cluster import KMeans
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, SGDClassifier
 from skimage.segmentation import slic
 from torch.nn import functional as F
 
@@ -421,10 +421,10 @@ class ACE:
             if len(np.unique(y)) < 2:
                 raise ValueError(f"Insufficient data to train a CAV for concept {concept_id}")
 
-            classifier = LogisticRegression(
-                solver="lbfgs",
+            classifier = SGDClassifier(
+                alpha=0.01,
                 max_iter=1000,
-                random_state=random_state,
+                tol=1e-3
             )
             classifier.fit(X, y)
             concept.cav = classifier.coef_.reshape(-1)
