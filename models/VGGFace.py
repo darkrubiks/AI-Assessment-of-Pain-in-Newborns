@@ -6,27 +6,37 @@ Date:13/02/2023
 
 This file contains the VGGFace model implemented by:
 
-Leonardo A. Ferreira, University Center of FEI,São Bernardo do Campo SP,Brazil  
-Lucas P. Carlini, University Center of FEI,São Bernardo do Campo SP,Brazil  
-Gabriel A. S. Coutrin, University Center of FEI,São Bernardo do Campo SP,Brazil  
-Victor V. Varoto, University Center of FEI,São Bernardo do Campo SP,Brazil 
+Leonardo A. Ferreira, University Center of FEI,São Bernardo do Campo SP,Brazil
+Lucas P. Carlini, University Center of FEI,São Bernardo do Campo SP,Brazil
+Gabriel A. S. Coutrin, University Center of FEI,São Bernardo do Campo SP,Brazil
+Victor V. Varoto, University Center of FEI,São Bernardo do Campo SP,Brazil
 
-on "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal 
+on "A Convolutional Neural Network-based Mobile Application to Bedside Neonatal
 Pain Assessment" in 2021 34th SIBGRAPI.
 
 doi: https://doi.org/10.1109/SIBGRAPI54419.2021.00060
 """
-import os
+from pathlib import Path
+from typing import Optional, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class VGGFace(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, weights_path: Optional[Union[str, Path]] = None) -> None:
         super(VGGFace, self).__init__()
 
-        self.VGGFace = torch.load(os.path.join('models','weights','VGG_face_original_model.pt'), weights_only=False)
+        default_weights = Path(__file__).resolve().parent / "weights" / "VGG_face_original_model.pt"
+        weight_file = Path(weights_path) if weights_path is not None else default_weights
+        if not weight_file.exists():
+            raise FileNotFoundError(
+                "Pre-trained VGGFace weights not found. Provide a valid path via 'weights_path' or "
+                f"place 'VGG_face_original_model.pt' under '{default_weights.parent}'."
+            )
+
+        self.VGGFace = torch.load(str(weight_file), weights_only=False)
 
         for param in self.VGGFace.parameters():
             param.requires_grad  = False

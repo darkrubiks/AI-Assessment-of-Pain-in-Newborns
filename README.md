@@ -85,6 +85,61 @@ Inside the `.yaml` file you can choose any optimizer from PyTorch and set its hy
 python train.py --config models\configs\config_NCNN.yaml
 ```
 
+### **ACE concept discovery with NCNN**
+
+The repository bundles a runnable example that demonstrates how to execute the
+PyTorch ACE pipeline with the [`NCNN`](models/NCNN.py) architecture. The script
+samples neonatal face images from `Datasets/DatasetsFaces/Images`, discovers
+concepts, trains CAVs, and reports TCAV scores while storing a few example
+masks on disk alongside PNG mosaics that visualise the most representative
+patches for each concept.
+
+```bash
+python examples/ace_ncnn_example.py --device cpu --discovery-samples 24 --eval-samples 12
+```
+
+Use `--dataset-dir` to point the script to a different image root, adjust
+`--discovery-samples` / `--eval-samples` to control how many photos are drawn
+for each stage, or tweak `--num-concepts` to change the number of ACE clusters.
+When a CUDA-capable GPU is available you can omit `--device cpu` and the script
+will automatically run on GPU. The example writes outputs under `ace_outputs/`
+by default: masks are saved to `ace_outputs/masks/` and visualisations to
+`ace_outputs/plots/`.
+
+### **ACE concept discovery with VGGFace**
+
+To analyse concepts discovered inside the [`VGGFace`](models/VGGFace.py)
+backbone, run the dedicated example which hooks into the
+`VGGFace.features.conv5_3` layer used by the neonatal pain classifier. The
+script expects access to the pre-trained `VGG_face_original_model.pt` weights.
+
+```bash
+python examples/ace_vggface_example.py --device cpu --discovery-samples 24 --eval-samples 12 \
+    --weights models/weights/VGG_face_original_model.pt
+```
+
+Override `--weights` if the checkpoint lives elsewhere, and use
+`--dataset-dir` to point at a different image repository. Outputs default to
+`ace_vggface_outputs/` with NumPy masks stored under `ace_vggface_outputs/masks/`
+and mosaic visualisations under `ace_vggface_outputs/plots/`.
+
+### **ACE concept discovery with any PyTorch CNN**
+
+For a fully self-contained PyTorch workflow, use the
+[`examples/ace_pytorch_example.py`](examples/ace_pytorch_example.py) script. It
+draws stratified subsets of the neonatal face dataset for training,
+concept-discovery, and evaluation, fits a lightweight convolutional network,
+runs the ACE pipeline, and saves both NumPy masks and concept patch mosaics for
+inspection.
+
+```bash
+python examples/ace_pytorch_example.py --device cpu --train-samples 192 --discovery-samples 32 --eval-samples 32
+```
+
+Adjust `--dataset-dir`, `--train-samples`, `--epochs`, or `--num-concepts` to
+explore different regimes. Results are exported to `ace_pytorch_outputs/` with
+plots stored under `ace_pytorch_outputs/concept_plots/`.
+
 ## **Models**
 
 | **Model**                | **Accuracy** | **Precision** | **Recall** | **F1**     | **Trained On**|
