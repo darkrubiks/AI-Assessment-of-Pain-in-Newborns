@@ -249,10 +249,7 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
             img_name = os.path.splitext(image_file)[0]
             label = 1 if img_name.split("_")[3] == "pain" else 0
 
-            if "VGGFace" in exp:
-                img_input = Image.fromarray(np.array(img_rgb)[:, :, ::-1])
-            else:
-                img_input = img_rgb
+            img_input = img_rgb
 
             blurred_image = img_input.filter(ImageFilter.GaussianBlur(radius=5))
 
