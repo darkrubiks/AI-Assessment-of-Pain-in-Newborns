@@ -1,6 +1,4 @@
 import os
-import cv2
-import numpy as np
 from torch.utils.data import Dataset
 from dataloaders.presets import PresetTransform
 from PIL import Image
@@ -29,10 +27,6 @@ class iCOPEVidDataset(Dataset):
     def __getitem__(self, idx):
         img_path = os.path.join(self.img_dir, self.img_names[idx])
         image = Image.open(img_path).convert("RGB")
-
-        if self.model_name == 'VGGFACE':
-            # For VGGFace, convert image mode as required.
-            image = Image.fromarray(np.array(image)[:, :, ::-1])
 
         image = self.transform(image)
 
