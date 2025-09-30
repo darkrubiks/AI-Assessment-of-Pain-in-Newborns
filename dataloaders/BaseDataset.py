@@ -9,7 +9,6 @@ import os
 import glob
 import gc
 import re
-import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 from PIL import Image
@@ -76,10 +75,6 @@ class BaseDataset(Dataset):
         """
         img_path = self.img_paths[idx]
         image = Image.open(img_path).convert("RGB")
-
-        if self.model_name == 'VGGFACE':
-            # For VGGFace, convert image mode as required.
-            image = Image.fromarray(np.array(image)[:, :, ::-1])
 
         return self.transform(image)
 
