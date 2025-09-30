@@ -82,8 +82,9 @@ class PresetTransform:
                 transforms.Resize((224,224), interpolation=interpolation, antialias=True),
                 transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
+                transforms.Lambda(lambda x: x[[2, 1, 0], ...]),
                 # VGGFace normalization
-                transforms.Normalize(mean=[0.367, 0.410, 0.506],
+                transforms.Normalize(mean=[0.506, 0.410, 0.367],
                                      std=[1, 1, 1])
             ])
         elif self.model_name == 'VIT':
