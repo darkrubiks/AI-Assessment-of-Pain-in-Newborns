@@ -18,8 +18,9 @@ def main(args):
     )
     
     # load PyTorch model
-    model = NCNN()
-    model.load_state_dict(torch.load(r'experiments\NCNN_FINAL\20250826_1349_NCNN\Model\best_model.pt'))
+    #model = NCNN()
+    model = VGGFace()
+    model.load_state_dict(torch.load(r'experiments\VGGFace_FINAL\20250826_1353_VGGFace\Model\best_model.pt'))
     
     # load ImageNet class label file and extract 
     # the index for args.target_class
@@ -33,7 +34,7 @@ def main(args):
         base_dir=base_dir,
         num_random_datasets=args.num_random_datasets,
         channel_mean=True,
-        input_shape=(120,120),
+        input_shape=(224,224),
         min_cluster_size=args.min_cluster_size,
         max_cluster_size=args.max_cluster_size,
         num_target_class_imgs=args.num_target_class_imgs,
@@ -89,7 +90,7 @@ def parse_arguments(argv):
         '--model_name', 
         type=str,
         help='model name', 
-        default='NCNN'
+        default='VGGFace'
     )
 
     parser.add_argument(
@@ -102,7 +103,7 @@ def parse_arguments(argv):
         '--layer', 
         type=str,
         help='name of the layer from which the activations should be calculated',
-        default='merge_branch'
+        default='VGGFace'
     )
     parser.add_argument(
         '--num_random_datasets', 
