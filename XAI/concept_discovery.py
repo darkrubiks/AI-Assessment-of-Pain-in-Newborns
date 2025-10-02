@@ -56,11 +56,13 @@ def get_layer_activations(model, layer:str, imgs:np.ndarray,
 
   if get_grads_for_cls_id is None:
     # register forward hook to get the activations from a specific layer
-    hook_handle = model._modules.get(layer).features.conv5_3.register_forward_hook(forward_hook) ###CHANGE HERE!!!!!
+    #hook_handle = model._modules.get(layer).features.conv5_3.register_forward_hook(forward_hook) ###CHANGE HERE!!!!!
+    hook_handle = model._modules.get(layer)[0].register_forward_hook(forward_hook) ###CHANGE HERE!!!!!
   else:
     # if get_grads_for_cls_id is set, instead register a backward hook which is used
     # to observe the gradients of a backward pass of the specified layer
-    hook_handle = model._modules.get(layer).features.conv5_3.register_full_backward_hook(hook_backwards) ###CHANGE HERE!!!!!
+    # hook_handle = model._modules.get(layer).features.conv5_3.register_full_backward_hook(hook_backwards) ###CHANGE HERE!!!!!
+    hook_handle = model._modules.get(layer)[0].register_full_backward_hook(hook_backwards)
   # clear global list in which layer activations/gradients are stored
   del layer_activations[:]
 
@@ -71,7 +73,7 @@ def get_layer_activations(model, layer:str, imgs:np.ndarray,
   for i in tqdm(range(int(imgs.shape[0] / batch_size) + 1), desc='[INFO] calculating activations'):
     # convert images to a PyTorch tensor
     tensor_imgs = torch.tensor(imgs[i * batch_size:(i + 1) * batch_size].transpose((0, 3, 1, 2)), dtype=torch.float32)
-    transformed_tensor_imgs = PresetTransform("VGGFace").transforms(tensor_imgs) #CHANGE HERE!!!!!
+    transformed_tensor_imgs = PresetTransform("NCNN").transforms(tensor_imgs) #CHANGE HERE!!!!!
     transformed_tensor_imgs.to('cuda' if torch.cuda.is_available() else 'cpu')
 
     # forward pass through the model
@@ -295,7 +297,7 @@ class ConceptDiscovery(object):
         filenames=imgs_filenames,
         max_imgs=max_imgs,
         return_filenames=False,
-        do_shuffle=False,
+        do_shuffle=True,
         run_parallel=(self.num_workers > 0),
         shape=self.image_shape,
         num_workers=self.num_workers)
