@@ -210,7 +210,7 @@ EXPLAINER_SPECS = [
 
 # main pipeline ----------------------------------------------------------------
 
-for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
+for model_name in ["ViT_B_32"]:
 
     path_experiments = os.path.join('experiments', model_name)
 
