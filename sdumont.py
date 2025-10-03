@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import os
+import gc
 from collections import defaultdict
 
 from tqdm import tqdm
@@ -210,7 +211,7 @@ EXPLAINER_SPECS = [
 
 # main pipeline ----------------------------------------------------------------
 
-for model_name in ["ViT_B_32"]:
+for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
 
     path_experiments = os.path.join('experiments', model_name)
 
@@ -329,6 +330,9 @@ for model_name in ["ViT_B_32"]:
                 all_data["probability"].append(float(probs))
                 all_data["prediction"].append(int(pred))
                 all_data["XAI_name"].append(XAI_name)
+
+                gc.collect()
+                torch.cuda.empty_cache()
 
     dataframe = pd.DataFrame(all_data)
     create_folder(os.path.join("RGU", model_name))
