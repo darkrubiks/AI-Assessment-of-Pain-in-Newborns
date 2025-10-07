@@ -76,7 +76,8 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=Fal
     region_scores = {}
     # For each region calculates the average pixel value, regions
     # with more importace will have larger values
-    for region, region_mask in region_masks.items():
+    for region, region_mask in region_masks.items():        
+        region_mask = cv2.dilate(region_mask.astype(np.uint8), np.ones((5,5)), iterations=3).astype(bool)
         region_importance = np.sum(xai_mask * region_mask)
         region_scores[region] = region_importance / np.sum(region_mask)
 
