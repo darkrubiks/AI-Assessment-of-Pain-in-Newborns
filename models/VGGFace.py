@@ -19,7 +19,6 @@ doi: https://doi.org/10.1109/SIBGRAPI54419.2021.00060
 import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class VGGFace(nn.Module):
@@ -51,8 +50,19 @@ class VGGFace(nn.Module):
     def forward(self, x):
         x = self.VGGFace(x)
         x = x.view(-1)
-        
+
         return x
-    
+
+    def get_embedding(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the penultimate-layer embedding."""
+        # pass through convolutional backbone
+        x = self.VGGFace.features(x)
+        x = self.VGGFace.avgpool(x)
+        x = torch.flatten(x, 1)
+        # run classifier up to the last linear layer
+        x = self.VGGFace.classifier[:-1](x)
+        return x.view(x.size(0), -1)
+
     def predict(self, x):
-        return F.sigmoid(self.forward(x))
+        return torch.sigmoid(self.forward(x))
+

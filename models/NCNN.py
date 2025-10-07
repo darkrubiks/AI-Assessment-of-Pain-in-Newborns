@@ -74,6 +74,16 @@ class NCNN(nn.Module):
         logits = self.classifier(feats)
         return logits.view(-1)
 
+    def get_embedding(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the 8-D embedding from the classifier."""
+        x_l = self.left_branch(x)
+        x_c = self.center_branch(x)
+        x_r = self.right_branch(x)
+        x_cat = torch.cat([x_l, x_c, x_r], dim=1)
+        feats = self.merge_branch(x_cat)
+        emb = self.classifier[:-1](feats)
+        return emb.view(emb.size(0), -1)
+
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """Returns sigmoid probabilities."""
