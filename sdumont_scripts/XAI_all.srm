@@ -5,7 +5,7 @@
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 12
 #SBATCH --mem 94G
-#SBATCH --time 15:00:00
+#SBATCH --time 5:00:00
 
 #Exibe os nós alocados para o Job
 echo $SLURM_JOB_NODELIST
