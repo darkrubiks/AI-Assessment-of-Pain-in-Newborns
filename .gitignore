@@ -16,6 +16,5 @@ relatório.xlsx
 dataset_processing.py
 
 # ignore extensions
-/*.ipynb
 *.npy
 *.png
