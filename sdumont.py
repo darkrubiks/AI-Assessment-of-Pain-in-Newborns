@@ -37,21 +37,6 @@ def perturb_fn(inputs):
     noise = torch.tensor(np.random.normal(0, 0.1, inputs.shape)).float().to(inputs.device)
     return noise, torch.clip(inputs - noise, 0, 1)
 
-def rgb_to_gray_and_scale(x):
-    x = np.asarray(x)
-    # Shape must be in (H, W, C)
-    x_combined = np.sum(x, axis=2)
-    x_combined = (x_combined > 0) * x_combined
-
-    sorted_vals = np.sort(np.abs(x_combined).flatten())
-    cum_sums = np.cumsum(sorted_vals)
-    threshold_id: int = np.where(cum_sums >= cum_sums[-1] * 0.01 * 98)[0][0]
-    threshold = sorted_vals[threshold_id]
-
-    attr_norm = x_combined / threshold
-
-    return np.clip(attr_norm, -1, 1)
-
 # --- Create superpixel feature mask for Captum ---
 def make_feature_mask(img_tensor, n_segments=100):
     x = img_tensor.detach().cpu().squeeze(0)  # 3 x H x W
@@ -152,9 +137,6 @@ EXPLAINER_SPECS = [
             "postprocess": lambda attr, ctx: LayerAttribution.interpolate(
                 attr, ctx["target_shape"], interpolate_mode="bilinear"
             ).repeat(1, 3, 1, 1),
-            "prepare": lambda ctx: {
-                "relu_attributions": True,
-            }
         },
     ),
     (
@@ -176,7 +158,7 @@ EXPLAINER_SPECS = [
             "prepare": lambda ctx: {
                 "attribute": {
                     "baselines": torch.zeros_like(ctx["input"]),
-                    "n_samples": 5,
+                    "n_samples": 10,
                     "stdevs": 0.0,
                 }
             },
@@ -187,7 +169,7 @@ EXPLAINER_SPECS = [
         {
             "factory": lambda model, layer: DeepLiftShap(model),
             "prepare": lambda ctx: {
-                "attribute": {"baselines": ctx["blurred"].repeat(5, 1, 1, 1)}
+                "attribute": {"baselines": ctx["blurred"].repeat(10, 1, 1, 1)}
             },
         },
     ),
@@ -282,26 +264,11 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
 
                 spec_kwargs = spec.get("prepare", lambda ctx: {})(method_ctx)
                 attr_kwargs = spec_kwargs.get("attribute", {})
-                sensitivity_kwargs = dict(attr_kwargs)
-                sensitivity_kwargs.update(spec_kwargs.get("sensitivity", {}))
-                infidelity_kwargs = spec_kwargs.get("infidelity", {}).copy()
 
                 attributions = explainer.attribute(method_ctx["input"], **attr_kwargs)
 
                 if "postprocess" in spec:
                     attributions = spec["postprocess"](attributions, method_ctx)
-
-                sens = sensitivity_max(
-                    explainer.attribute, method_ctx["input"], **sensitivity_kwargs
-                )
-                infid = infidelity(
-                    model,
-                    perturb_fn,
-                    method_ctx["input"],
-                    attributions,
-                    n_perturb_samples=30,
-                    **infidelity_kwargs,
-                )
 
                 attributions_np = (
                     attributions.squeeze(0)
@@ -310,18 +277,15 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
                     .numpy()
                     .transpose(1, 2, 0)
                 )
-                attributions_normalized = rgb_to_gray_and_scale(attributions_np)
 
                 output_dir = os.path.join("RGU", model_name, XAI_name)
                 create_folder(output_dir)
                 output_path = os.path.join(output_dir, f"{img_name}.npz")
-                np.savez_compressed(output_path, mask=attributions_normalized, mask_raw=attributions_np)
+                np.savez_compressed(output_path, mask_raw=attributions_np)
 
                 all_data["img_path"].append(full_img_path)
                 all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
                 all_data["label"].append(label)
-                all_data["sensitivity"].append(float(sens))
-                all_data["infidelity"].append(float(infid))
                 all_data["mask_path"].append(output_path)
 
                 with torch.no_grad():
