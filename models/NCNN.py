@@ -72,6 +72,7 @@ class NCNN(nn.Module):
 
         # final logit
         logits = self.classifier(feats)
+        #preds = torch.cat([-logits, logits], dim=1)
         return logits.view(-1)
 
 
