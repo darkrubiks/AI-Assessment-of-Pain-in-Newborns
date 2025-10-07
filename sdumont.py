@@ -194,6 +194,7 @@ EXPLAINER_SPECS = [
 # main pipeline ----------------------------------------------------------------
 
 for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
+    print(f"---------------Processing model: {model_name}---------------")
 
     path_experiments = os.path.join('experiments', model_name)
 
