@@ -7,8 +7,8 @@ Date:22/09/2023
 This model implements the ViT_b_32 architecture pre-trained on IMAGENET.
 Only the classification head is trainable.
 """
+import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision.models import vit_b_32
 
 
@@ -36,5 +36,5 @@ class ViT(nn.Module):
         return x.view(x.size(0), -1)
 
     def predict(self, x):
-        return F.sigmoid(self.forward(x))
+        return torch.sigmoid(self.forward(x))
 

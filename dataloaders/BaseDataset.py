@@ -119,6 +119,7 @@ class BaseDataset(Dataset):
         return len(self.img_paths)
 
     def __getitem__(self, idx: int):
+        img_path = self.img_paths[idx]
         if self.cache:
             image = self._images_cached[idx]
             label = self._labels_cached[idx]
@@ -126,7 +127,7 @@ class BaseDataset(Dataset):
             image = self._load_image(idx)
             label = self._load_label(idx)
 
-        return {'image': image, 'label': label}
+        return {'image': image, 'label': label, 'path': img_path}
 
     def __del__(self):
         del self._labels_cached
