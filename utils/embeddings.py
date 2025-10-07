@@ -1,5 +1,7 @@
 import torch
 from typing import Iterable, Tuple, Optional
+from tqdm import tqdm
+import numpy as np
 
 @torch.no_grad()
 def extract_embeddings(model: torch.nn.Module,
@@ -22,35 +24,82 @@ def extract_embeddings(model: torch.nn.Module,
         Tensor of shape ``[N, D]`` with all embeddings.
     labels: torch.Tensor or None
         Tensor with labels if provided by the dataloader.
+    paths: list[str]
+        List with the file paths associated with each embedding.
     """
     model.eval()
-    if device is None:
-        device = next(model.parameters()).device
+    model.to(device)
     all_embs = []
     all_labels = []
-    for batch in dataloader:
-        if isinstance(batch, (list, tuple)) and len(batch) > 1:
-            images, labels = batch
-            all_labels.append(torch.as_tensor(labels))
-        else:
-            images = batch
+    all_paths = []
+
+    for batch in tqdm(dataloader):
+        images = batch['image'].to(device)
+        labels = batch['label'].to(device)
+        paths = batch['path']
+
+        all_labels.append(torch.as_tensor(labels))
+        all_paths.extend(paths)
+
         images = images.to(device)
         emb = model.get_embedding(images).detach().cpu()
         all_embs.append(emb)
+
     embeddings = torch.cat(all_embs, dim=0)
     labels = torch.cat(all_labels, dim=0) if all_labels else None
-    return embeddings, labels
+
+    result = {
+        "embeddings": embeddings.cpu().numpy(),
+        "labels": labels.cpu().numpy(),
+        "paths": np.asarray(all_paths, dtype=object),
+    }
+    
+    return result
 
 
-def find_nearest(query_embedding: torch.Tensor,
-                 embeddings: torch.Tensor,
-                 k: int = 1) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Find ``k`` nearest embeddings to ``query_embedding`` using L2 distance."""
+import numpy as np
+from typing import Dict, Tuple
+
+def find_nearest(
+    query_embedding,
+    embedding_store,
+    k: int = 1,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Find ``k`` nearest embeddings to ``query_embedding`` using L2 distance.
+
+    Parameters
+    ----------
+    query_embedding : np.ndarray | torch.Tensor
+        The embedding to query, shape ``[D]`` or ``[1, D]``.
+    embedding_store : dict[str, np.ndarray]
+        Dictionary containing keys ``embeddings`` (``[N, D]``) and ``paths`` (``[N]``).
+    k : int, optional
+        Number of nearest neighbours to return.
+
+    Returns
+    -------
+    indices : np.ndarray
+        Indices of the nearest embeddings within ``embedding_store["embeddings"]``.
+    distances : np.ndarray
+        L2 distances corresponding to each neighbour.
+    paths : np.ndarray
+        The file paths (dtype ``object``) for each neighbour.
+    """
+    if isinstance(query_embedding, torch.Tensor):
+        query_embedding = query_embedding.detach().cpu().numpy()
     if query_embedding.ndim == 1:
-        query_embedding = query_embedding.unsqueeze(0)
+        query_embedding = query_embedding[np.newaxis, :]
+
+    embeddings = embedding_store["embeddings"]
+    paths = embedding_store.get("paths", np.array([], dtype=object))
+
     diff = embeddings - query_embedding
-    distances = diff.norm(dim=1)
-    dist, idx = torch.topk(distances, k, largest=False)
-    return idx, dist
+    distances = np.linalg.norm(diff, axis=1)
+
+    k = min(k, embeddings.shape[0])
+    nearest_idx = np.argpartition(distances, k - 1)[:k]
+    nearest_idx = nearest_idx[np.argsort(distances[nearest_idx])]
+
+    return nearest_idx, distances[nearest_idx], paths[nearest_idx]
 
 

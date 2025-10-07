@@ -5,6 +5,8 @@ __pycache__
 Datasets/
 images/
 experiments/
+RGU/
+cav/
 
 # ignore large models files
 models/weights

@@ -19,7 +19,6 @@ doi: https://doi.org/10.1109/SIBGRAPI54419.2021.00060
 import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class VGGFace(nn.Module):
@@ -65,5 +64,5 @@ class VGGFace(nn.Module):
         return x.view(x.size(0), -1)
 
     def predict(self, x):
-        return F.sigmoid(self.forward(x))
+        return torch.sigmoid(self.forward(x))
 
