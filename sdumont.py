@@ -219,7 +219,7 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
         test_path = config["path_test"].replace("\\", "/")
 
         state_dict = torch.load(path_model, map_location=device)
-        model.load_state_dict(state_dict)
+        #model.load_state_dict(state_dict)
         model.eval()
 
         explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
