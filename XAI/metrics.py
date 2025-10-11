@@ -79,7 +79,8 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=Fal
     for region, region_mask in region_masks.items():        
         region_mask = cv2.dilate(region_mask.astype(np.uint8), np.ones((5,5)), iterations=3).astype(bool)
         region_importance = np.sum(xai_mask * region_mask)
-        region_scores[region] = region_importance / np.sum(region_mask)
+        denom = np.sum(region_mask)
+        region_scores[region] = region_importance / denom if denom > 0 else 0.0
 
     # Sort the dictionary by values in ascending order
     if sort:
