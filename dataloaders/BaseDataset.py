@@ -47,8 +47,9 @@ class BaseDataset(Dataset):
         # Determine file pattern based on soft labeling option.
         pattern = '*_UNIFESP_*.jpg' if self.soft != 'NONE' else '*.jpg'
         self.img_paths = sorted(safe_glob(os.path.join(self.img_dir, pattern)))
+        self.img_paths = [p for p in self.img_paths if "AUG" not in os.path.basename(p)]
         if not self.img_paths:
-            raise ValueError(f"No images found in {self.img_dir} with pattern {pattern}")
+            raise ValueError(f"No images found in {self.img_dir} with pattern {pattern} (after removing AUG files)")
 
         # Get the transformation preset for the given model.
         self.transform = PresetTransform(self.model_name).transforms
