@@ -30,6 +30,7 @@ def extract_embeddings(model: torch.nn.Module,
     model.eval()
     model.to(device)
     all_embs = []
+    all_probs = []
     all_labels = []
     all_paths = []
 
@@ -43,14 +44,18 @@ def extract_embeddings(model: torch.nn.Module,
 
         images = images.to(device)
         emb = model.get_embedding(images).detach().cpu()
+        probs = model.predict(images).detach().cpu()
         all_embs.append(emb)
+        all_probs.append(probs)
 
     embeddings = torch.cat(all_embs, dim=0)
     labels = torch.cat(all_labels, dim=0) if all_labels else None
+    probs = torch.cat(all_probs, dim=0) if all_probs else None
 
     result = {
         "embeddings": embeddings.cpu().numpy(),
         "labels": labels.cpu().numpy(),
+        "probs": probs.cpu().numpy(),
         "paths": np.asarray(all_paths, dtype=object),
     }
     
