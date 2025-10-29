@@ -2,11 +2,23 @@ import torch
 from typing import Iterable, Tuple, Optional
 from tqdm import tqdm
 import numpy as np
+from pathlib import Path
+import numpy as np
 
+def _save_embeddings(result: dict, cache_path: Path) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(cache_path, **result)
+
+def _load_embeddings(cache_path: Path) -> dict:
+    with np.load(cache_path, allow_pickle=True) as data:
+        return {key: data[key] for key in data.files}
+    
 @torch.no_grad()
 def extract_embeddings(model: torch.nn.Module,
                        dataloader: Iterable,
-                       device: Optional[torch.device] = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+                       device: Optional[torch.device] = None,
+                       cache_path=None,
+                       refresh=None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     """Extract embeddings for all samples in a dataloader.
 
     Parameters
@@ -34,32 +46,38 @@ def extract_embeddings(model: torch.nn.Module,
     all_labels = []
     all_paths = []
 
-    for batch in tqdm(dataloader):
-        images = batch['image'].to(device)
-        labels = batch['label'].to(device)
-        paths = batch['path']
+    cache_path = Path(cache_path) if cache_path else None
 
-        all_labels.append(torch.as_tensor(labels))
-        all_paths.extend(paths)
+    if cache_path and cache_path.exists() and not refresh:
+        return _load_embeddings(cache_path)
+    else:
+        for batch in tqdm(dataloader):
+            images = batch['image'].to(device)
+            labels = batch['label'].to(device)
+            paths = batch['path']
 
-        images = images.to(device)
-        emb = model.get_embedding(images).detach().cpu()
-        probs = model.predict(images).detach().cpu()
-        all_embs.append(emb)
-        all_probs.append(probs)
+            all_labels.append(torch.as_tensor(labels))
+            all_paths.extend(paths)
 
-    embeddings = torch.cat(all_embs, dim=0)
-    labels = torch.cat(all_labels, dim=0) if all_labels else None
-    probs = torch.cat(all_probs, dim=0) if all_probs else None
+            images = images.to(device)
+            emb = model.get_embedding(images).detach().cpu()
+            probs = model.predict(images).detach().cpu()
+            all_embs.append(emb)
+            all_probs.append(probs)
 
-    result = {
-        "embeddings": embeddings.cpu().numpy(),
-        "labels": labels.cpu().numpy(),
-        "probs": probs.cpu().numpy(),
-        "paths": np.asarray(all_paths, dtype=object),
-    }
-    
-    return result
+        embeddings = torch.cat(all_embs, dim=0)
+        labels = torch.cat(all_labels, dim=0) if all_labels else None
+        probs = torch.cat(all_probs, dim=0) if all_probs else None
+
+        result = {
+            "embeddings": embeddings.cpu().numpy(),
+            "labels": labels.cpu().numpy(),
+            "probs": probs.cpu().numpy(),
+            "paths": np.asarray(all_paths, dtype=object),
+        }
+        if cache_path:
+            _save_embeddings(result, cache_path)
+        return result
 
 
 import numpy as np
