@@ -68,11 +68,13 @@ def extract_embeddings(model: torch.nn.Module,
         embeddings = torch.cat(all_embs, dim=0)
         labels = torch.cat(all_labels, dim=0) if all_labels else None
         probs = torch.cat(all_probs, dim=0) if all_probs else None
+        preds = torch.ge(probs, 0.5).type(torch.int)
 
         result = {
             "embeddings": embeddings.cpu().numpy(),
             "labels": labels.cpu().numpy(),
             "probs": probs.cpu().numpy(),
+            "preds": preds.cpu().numpy(),
             "paths": np.asarray(all_paths, dtype=object),
         }
         if cache_path:
