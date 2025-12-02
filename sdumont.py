@@ -192,8 +192,9 @@ EXPLAINER_SPECS = [
 
 
 # main pipeline ----------------------------------------------------------------
+icopevid_paths = r"Datasets\Originais\iCOPE\iCOPEvid\all_frames"
 
-for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
+for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
     print(f"---------------Processing model: {model_name}---------------")
 
     path_experiments = os.path.join('experiments', model_name)
@@ -201,7 +202,7 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
     all_data = defaultdict(list)
 
     for exp in os.listdir(path_experiments):
-        if any(ext in exp for ext in (".pkl", "masks", ".png", ".pdf")):
+        if any(ext in exp for ext in (".pkl", "masks", ".png", ".pdf", "icopevid")):
             continue
 
         experiment_cfg = resolve_experiment(exp, device)
@@ -216,89 +217,93 @@ for model_name in ["NCNN", "VGGFace", "ViT_B_32"]:
         path_model = os.path.join(path_experiments, exp, "Model", "best_model.pt")
         path_yaml = os.path.join(path_experiments, exp, "Model", "config.yaml")
         config = load_config(path_yaml)
-        test_path = config["path_test"].replace("\\", "/")
+        #test_path = config["path_test"].replace("\\", "/")
 
         state_dict = torch.load(path_model, map_location=device)
-        #model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict)
         model.eval()
 
         explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
 
-        image_files = [f for f in os.listdir(test_path) if f.lower().endswith(".jpg")]
-        for image_file in tqdm(image_files):
-            full_img_path = os.path.join(test_path, image_file)
+        for video in os.listdir(icopevid_paths):
+            print(f"Processing video: {video}")
+            test_path = os.path.join(icopevid_paths, video)
 
-            img_rgb = Image.open(full_img_path).convert("RGB")
-            img_rgb = img_rgb.resize((img_size, img_size))
-            img_name = os.path.splitext(image_file)[0]
-            label = 1 if img_name.split("_")[3] == "pain" else 0
+            image_files = [f for f in os.listdir(test_path) if f.lower().endswith(".jpg")]
+            for image_file in tqdm(image_files):
+                full_img_path = os.path.join(test_path, image_file)
 
-            img_input = img_rgb
+                img_rgb = Image.open(full_img_path).convert("RGB")
+                img_rgb = img_rgb.resize((img_size, img_size))
+                img_name = os.path.splitext(image_file)[0]
+                label = 1 if img_name.split("_")[3] == "pain" else 0
 
-            blurred_image = img_input.filter(ImageFilter.GaussianBlur(radius=5))
+                img_input = img_rgb
 
-            transformed = transform(img_input)
-            transformed_blurred = transform(blurred_image)
+                blurred_image = img_input.filter(ImageFilter.GaussianBlur(radius=5))
 
-            base_input = transformed.unsqueeze(0).to(device)
-            base_blurred = transformed_blurred.unsqueeze(0).to(device)
+                transformed = transform(img_input)
+                transformed_blurred = transform(blurred_image)
 
-            ctx_base = {
-                "device": device,
-                "target_shape": (img_size, img_size),
-                "input_base": base_input,
-                "blurred": base_blurred,
-            }
+                base_input = transformed.unsqueeze(0).to(device)
+                base_blurred = transformed_blurred.unsqueeze(0).to(device)
 
-            for XAI_name, spec in EXPLAINER_SPECS:
-                explainer = explainers[XAI_name]
+                ctx_base = {
+                    "device": device,
+                    "target_shape": (img_size, img_size),
+                    "input_base": base_input,
+                    "blurred": base_blurred,
+                }
 
-                method_ctx = dict(ctx_base)
-                method_ctx["input"] = (
-                    ctx_base["input_base"].clone().detach().requires_grad_(True)
-                )
+                for XAI_name, spec in EXPLAINER_SPECS:
+                    explainer = explainers[XAI_name]
 
-                if XAI_name == "Lime" or XAI_name == "DeepLift":
+                    method_ctx = dict(ctx_base)
                     method_ctx["input"] = (
-                        ctx_base["input_base"].clone().detach().requires_grad_(True).contiguous()
-                )
+                        ctx_base["input_base"].clone().detach().requires_grad_(True)
+                    )
 
-                spec_kwargs = spec.get("prepare", lambda ctx: {})(method_ctx)
-                attr_kwargs = spec_kwargs.get("attribute", {})
+                    if XAI_name == "Lime" or XAI_name == "DeepLift":
+                        method_ctx["input"] = (
+                            ctx_base["input_base"].clone().detach().requires_grad_(True).contiguous()
+                    )
 
-                attributions = explainer.attribute(method_ctx["input"], **attr_kwargs)
+                    spec_kwargs = spec.get("prepare", lambda ctx: {})(method_ctx)
+                    attr_kwargs = spec_kwargs.get("attribute", {})
 
-                if "postprocess" in spec:
-                    attributions = spec["postprocess"](attributions, method_ctx)
+                    attributions = explainer.attribute(method_ctx["input"], **attr_kwargs)
 
-                attributions_np = (
-                    attributions.squeeze(0)
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .transpose(1, 2, 0)
-                )
+                    if "postprocess" in spec:
+                        attributions = spec["postprocess"](attributions, method_ctx)
 
-                output_dir = os.path.join("RGU", model_name, XAI_name)
-                create_folder(output_dir)
-                output_path = os.path.join(output_dir, f"{img_name}.npz")
-                np.savez_compressed(output_path, mask_raw=attributions_np)
+                    attributions_np = (
+                        attributions.squeeze(0)
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        .transpose(1, 2, 0)
+                    )
 
-                all_data["img_path"].append(full_img_path)
-                all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
-                all_data["label"].append(label)
-                all_data["mask_path"].append(output_path)
+                    output_dir = os.path.join(path_experiments, "icopevid", video, XAI_name)
+                    create_folder(output_dir)
+                    output_path = os.path.join(output_dir, f"{img_name}.npz")
+                    np.savez_compressed(output_path, mask_raw=attributions_np)
 
-                with torch.no_grad():
-                    probs = model.predict(ctx_base["input_base"])
-                pred = (probs >= 0.5).int()
-                all_data["probability"].append(float(probs))
-                all_data["prediction"].append(int(pred))
-                all_data["XAI_name"].append(XAI_name)
+                    all_data["img_path"].append(full_img_path)
+                    all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
+                    all_data["label"].append(label)
+                    all_data["mask_path"].append(output_path)
 
-                gc.collect()
-                torch.cuda.empty_cache()
+                    with torch.no_grad():
+                        probs = model.predict(ctx_base["input_base"])
+                    pred = (probs >= 0.5).int()
+                    all_data["probability"].append(float(probs))
+                    all_data["prediction"].append(int(pred))
+                    all_data["XAI_name"].append(XAI_name)
 
-    dataframe = pd.DataFrame(all_data)
-    create_folder(os.path.join("RGU", model_name))
-    dataframe.to_csv(os.path.join("RGU", model_name, "explainers.csv"), index=False)
+                    gc.collect()
+                    torch.cuda.empty_cache()
+
+        dataframe = pd.DataFrame(all_data)
+        #create_folder(os.path.join(path_experiments, "icopevid"))
+        dataframe.to_csv(os.path.join(path_experiments, "icopevid", video, "explainers.csv"), index=False)

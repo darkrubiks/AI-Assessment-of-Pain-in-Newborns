@@ -74,13 +74,13 @@ class PresetTransform:
         if self.model_name == 'NCNN':
             self.transforms = transforms.Compose([
                 transforms.Resize((120,120), interpolation=interpolation, antialias=True),
-                #transforms.PILToTensor(),
+                transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
             ])
         elif self.model_name == 'VGGFACE':
             self.transforms = transforms.Compose([
                 transforms.Resize((224,224), interpolation=interpolation, antialias=True),
-                #transforms.PILToTensor(),
+                transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
                 transforms.Lambda(lambda x: x[[2, 1, 0], ...]),
                 # VGGFace normalization
@@ -90,7 +90,7 @@ class PresetTransform:
         elif self.model_name == 'VIT':
             self.transforms = transforms.Compose([
                 transforms.Resize((224,224), interpolation=interpolation, antialias=True),
-                #transforms.PILToTensor(),
+                transforms.PILToTensor(),
                 transforms.ConvertImageDtype(torch.float),
                 # Imagenet normalization
                 transforms.Normalize(mean=[0.485, 0.456, 0.406],

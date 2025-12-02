@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH --nodes=1           #Numero de Nos
-#SBATCH -p sequana_gpu      #Fila (partition) a ser utilizada
-#SBATCH -J VGG_XAI
+#SBATCH -p sequana_gpu_dev      #Fila (partition) a ser utilizada
+#SBATCH -J ALL_XAI
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 12
 #SBATCH --mem 94G
-#SBATCH --time 5:00:00
 
 #Exibe os nós alocados para o Job
 echo $SLURM_JOB_NODELIST
