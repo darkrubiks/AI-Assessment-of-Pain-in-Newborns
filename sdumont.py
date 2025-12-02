@@ -192,7 +192,7 @@ EXPLAINER_SPECS = [
 
 
 # main pipeline ----------------------------------------------------------------
-icopevid_paths = r"Datasets\Originais\iCOPE\iCOPEvid\all_frames"
+icopevid_paths = "Datasets/Originais/iCOPE/iCOPEvid/all_frames"
 
 for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
     print(f"---------------Processing model: {model_name}---------------")
