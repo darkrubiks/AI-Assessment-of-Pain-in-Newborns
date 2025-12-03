@@ -199,8 +199,6 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
 
     path_experiments = os.path.join('experiments', model_name)
 
-    all_data = defaultdict(list)
-
     for exp in os.listdir(path_experiments):
         if any(ext in exp for ext in (".pkl", "masks", ".png", ".pdf", "icopevid")):
             continue
@@ -228,8 +226,16 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
         for video in os.listdir(icopevid_paths):
             print(f"Processing video: {video}")
             test_path = os.path.join(icopevid_paths, video)
+            all_data = defaultdict(list)
 
             image_files = [f for f in os.listdir(test_path) if f.lower().endswith(".jpg")]
+            output_dirs = {
+                XAI_name: os.path.join(path_experiments, "icopevid", video, XAI_name)
+                for XAI_name, _ in EXPLAINER_SPECS
+            }
+            for out_dir in output_dirs.values():
+                create_folder(out_dir)
+
             for image_file in tqdm(image_files):
                 full_img_path = os.path.join(test_path, image_file)
 
@@ -284,8 +290,7 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
                         .transpose(1, 2, 0)
                     )
 
-                    output_dir = os.path.join(path_experiments, "icopevid", video, XAI_name)
-                    create_folder(output_dir)
+                    output_dir = output_dirs[XAI_name]
                     output_path = os.path.join(output_dir, f"{img_name}.npz")
                     np.savez_compressed(output_path, mask_raw=attributions_np)
 
@@ -301,9 +306,6 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
                     all_data["prediction"].append(int(pred))
                     all_data["XAI_name"].append(XAI_name)
 
-                    gc.collect()
-                    torch.cuda.empty_cache()
-
-        dataframe = pd.DataFrame(all_data)
-        #create_folder(os.path.join(path_experiments, "icopevid"))
-        dataframe.to_csv(os.path.join(path_experiments, "icopevid", video, "explainers.csv"), index=False)
+            dataframe = pd.DataFrame(all_data)
+            #create_folder(os.path.join(path_experiments, "icopevid"))
+            dataframe.to_csv(os.path.join(path_experiments, "icopevid", video, "explainers.csv"), index=False)
