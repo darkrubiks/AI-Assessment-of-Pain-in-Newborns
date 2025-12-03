@@ -27,12 +27,12 @@ which python3
 
 cd $SCRATCH/AI-Assessment-of-Pain-in-Newborns
 
-(
- while sleep 600; do
-	nvidia-smi
-	sstat -j $SLURM_JOB_ID --format=JobID,AveRSS,MaxRSS
- done
-)&
+#(
+# while sleep 600; do
+#	nvidia-smi
+#	sstat -j $SLURM_JOB_ID --format=JobID,AveRSS,MaxRSS
+# done
+#)&
 
 #Executa
 python sdumont.py
