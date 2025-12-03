@@ -224,7 +224,6 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
         explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
 
         for video in os.listdir(icopevid_paths):
-            print(f"Processing video: {video}")
             test_path = os.path.join(icopevid_paths, video)
             all_data = defaultdict(list)
 
@@ -236,7 +235,7 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
             for out_dir in output_dirs.values():
                 create_folder(out_dir)
 
-            for image_file in tqdm(image_files):
+            for image_file in tqdm(image_files, desc=f"Processing frames for video {video}"):
                 full_img_path = os.path.join(test_path, image_file)
 
                 img_rgb = Image.open(full_img_path).convert("RGB")
@@ -260,6 +259,10 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
                     "input_base": base_input,
                     "blurred": base_blurred,
                 }
+
+                with torch.no_grad():
+                    probs = model.predict(ctx_base["input_base"])
+                    pred = (probs >= 0.5).int()
 
                 for XAI_name, spec in EXPLAINER_SPECS:
                     explainer = explainers[XAI_name]
@@ -298,10 +301,6 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
                     all_data["fold"].append(os.path.basename(os.path.dirname(test_path)))
                     all_data["label"].append(label)
                     all_data["mask_path"].append(output_path)
-
-                    with torch.no_grad():
-                        probs = model.predict(ctx_base["input_base"])
-                    pred = (probs >= 0.5).int()
                     all_data["probability"].append(float(probs))
                     all_data["prediction"].append(int(pred))
                     all_data["XAI_name"].append(XAI_name)
