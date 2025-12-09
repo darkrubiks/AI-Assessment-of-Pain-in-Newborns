@@ -194,7 +194,7 @@ EXPLAINER_SPECS = [
 # main pipeline ----------------------------------------------------------------
 icopevid_paths = "Datasets/Originais/iCOPE/iCOPEvid/all_frames"
 
-for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
+for model_name in ["NCNN_FINAL"]:
     print(f"---------------Processing model: {model_name}---------------")
 
     path_experiments = os.path.join('experiments', model_name)
@@ -223,7 +223,7 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
 
         explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
 
-        for video in os.listdir(icopevid_paths):
+        for video in os.listdir(icopevid_paths)[47:]:
             test_path = os.path.join(icopevid_paths, video)
             all_data = defaultdict(list)
 
