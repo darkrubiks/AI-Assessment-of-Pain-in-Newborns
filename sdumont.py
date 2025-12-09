@@ -223,7 +223,7 @@ for model_name in ["NCNN_FINAL", "VGGFace_FINAL", "ViT_B_32_ENSEMBLE_FINAL"]:
 
         explainers = {name: spec["factory"](model, layer) for name, spec in EXPLAINER_SPECS}
 
-        for video in os.listdir(icopevid_paths)[47:]:
+        for video in os.listdir(icopevid_paths)[49:]:
             test_path = os.path.join(icopevid_paths, video)
             all_data = defaultdict(list)
 
