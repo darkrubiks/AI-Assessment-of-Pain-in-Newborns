@@ -4,7 +4,7 @@
 #  =============================
 
 # --- Figure layout ---
-figure.figsize: 6.5, 4
+figure.figsize: 6, 6
 figure.dpi: 300
 figure.autolayout: True
 
