@@ -69,7 +69,7 @@ def kmeans_post_processing(attribution_mask: np.ndarray,
     thresh = result.mean() + result.std() * alpha_thres
     alpha_channel = (result > thresh).astype(np.uint8)
 
-    return result * alpha_channel
+    return result, alpha_channel
 
 
 def tobii_cspline_kernel(radius_px: int) -> np.ndarray:
@@ -127,6 +127,8 @@ def tobii_post_processing(heatmap: np.ndarray,
         if maximum > minimum:
             convolved = (convolved - minimum) / (maximum - minimum)
         convolved = np.clip(convolved, 0.0, 1.0)
+
+    convolved = get_top_k_pixels(convolved, k_percent=10.0, binary=False)
 
     return convolved
 
