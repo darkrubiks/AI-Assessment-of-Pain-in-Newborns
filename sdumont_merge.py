@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 import os
+import logging
 
 PERTURBATION_LEVELS = np.arange(0, 100, 1)
 PERTURB_TYPE = ["impute"]
@@ -23,6 +24,12 @@ IMPORTANCE = "MoRF"
 MASK_KEY = "mask_raw"
 MASK_DTYPE = np.float32
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 TARGET_EXPLAINERS = {
     "Saliency", "IntegratedGradients", "DeepLift", "DeepLiftShap",
     "GradientShap", "GradCAM", "GuidedGradCAM", "Deconvolution",
@@ -37,6 +44,7 @@ def load_masks(xai_dirs, mask_key="mask_raw", aligned=True, method_filter=None, 
         method = xai_dir.name
         if method_filter is not None and method not in method_filter:
             continue
+        loaded = 0
         pattern = "aligned/*.npz" if aligned else "*.npz"
         for npz_file in tqdm(xai_dir.glob(pattern), desc=f"Loading {method}", leave=False):
             with np.load(npz_file) as archive:
@@ -46,6 +54,8 @@ def load_masks(xai_dirs, mask_key="mask_raw", aligned=True, method_filter=None, 
             collapsed = mask.sum(axis=2, dtype=dtype)
             norm_mask = normalize_mask_0_1(collapsed, dtype=dtype)
             samples.setdefault(npz_file.stem, {})[method] = norm_mask
+            loaded += 1
+        logger.info("Loaded %d masks for method %s from %s", loaded, method, xai_dir)
     return samples
 
 def compute_aopc(explainers, return_steps=False):
@@ -95,12 +105,24 @@ def normalize_mask_0_1(mask, eps=1e-12, dtype=np.float32):
     mask /= (denom + eps)
     return mask
 
-video_dir = Path("experiments") / MODEL_NAME_2 / "icopevid"
-for video in os.listdir(video_dir):
-    video_path = os.path.join(video_dir, video)
+logger.info(
+    "Starting merge: model=%s model_dir=%s align=%s load_type=%s importance=%s",
+    MODEL_NAME_AUX,
+    MODEL_NAME_2,
+    ALIGN,
+    LOAD_TYPE,
+    IMPORTANCE,
+)
 
-    HEATMAP_DIR = video_path / video
+video_dir = Path("experiments") / MODEL_NAME_2 / "icopevid"
+logger.info("Video root: %s", video_dir)
+for video in os.listdir(video_dir):
+    HEATMAP_DIR = video_dir / video
+
+    logger.info("Processing video %s", video)
+    logger.info("Heatmap dir: %s", HEATMAP_DIR)
     xai_dirs = [p for p in HEATMAP_DIR.iterdir() if p.is_dir()]
+    logger.info("Found %d explainer dirs", len(xai_dirs))
     samples = load_masks(
         xai_dirs,
         mask_key=MASK_KEY,
@@ -108,9 +130,12 @@ for video in os.listdir(video_dir):
         method_filter=TARGET_EXPLAINERS,
         dtype=MASK_DTYPE,
     )
+    total_masks = sum(len(m) for m in samples.values())
+    logger.info("Loaded %d samples (%d masks total)", len(samples), total_masks)
 
 
     for perturb in PERTURB_TYPE:
+        logger.info("Perturbation: %s", perturb)
         curves_path = (
             Path("sdumont_scripts")
             / f"perturb_pixel_curves_{MODEL_NAME_AUX}_{perturb}_{IMPORTANCE}_{LOAD_TYPE}.pkl"
@@ -119,6 +144,8 @@ for video in os.listdir(video_dir):
             Path("sdumont_scripts")
             / f"perturb_pixel_curves_{MODEL_NAME_AUX}_{perturb}_random_{LOAD_TYPE}.pkl"
         )
+        logger.info("Curves path: %s", curves_path)
+        logger.info("Random path: %s", random_path)
 
         if not curves_path.exists():
             raise FileNotFoundError(f"Explainability curves missing: {curves_path}")
@@ -142,6 +169,7 @@ for video in os.listdir(video_dir):
 
         output_root = HEATMAP_DIR / "MERGED_MASKS"
         output_root.mkdir(parents=True, exist_ok=True)
+        logger.info("Output dir: %s", output_root)
 
         for ID, masks in tqdm(samples.items(), desc=f"Merging {perturb}"):
             if not masks:
