@@ -1,0 +1,166 @@
+import pickle
+from pathlib import Path
+
+import numpy as np
+from tqdm import tqdm
+import os
+
+PERTURBATION_LEVELS = np.arange(0, 100, 1)
+PERTURB_TYPE = ["impute"]
+
+MODEL_NAME_AUX = "NCNN"        # "NCNN", "VGGFace", "ViT_B_32"
+
+if MODEL_NAME_AUX == "NCNN":
+    MODEL_NAME_2 = "NCNN_FINAL"
+elif MODEL_NAME_AUX == "VGGFace":
+    MODEL_NAME_2 = "VGGFace_FINAL"
+elif MODEL_NAME_AUX == "ViT_B_32":
+    MODEL_NAME_2 = "ViT_B_32_ENSEMBLE_FINAL"
+
+ALIGN = False                  # True or False
+LOAD_TYPE = "trained"          # all | trained | random | baselines
+IMPORTANCE = "MoRF"
+MASK_KEY = "mask_raw"
+MASK_DTYPE = np.float32
+
+TARGET_EXPLAINERS = {
+    "Saliency", "IntegratedGradients", "DeepLift", "DeepLiftShap",
+    "GradientShap", "GradCAM", "GuidedGradCAM", "Deconvolution",
+    "Occlusion", "Lime",
+}
+
+
+def load_masks(xai_dirs, mask_key="mask_raw", aligned=True, method_filter=None, dtype=np.float32):
+    """Return {sample_id: {method_name: normalized 2D mask}} for every .npz in the folders."""
+    samples = {}
+    for xai_dir in map(Path, xai_dirs):
+        method = xai_dir.name
+        if method_filter is not None and method not in method_filter:
+            continue
+        pattern = "aligned/*.npz" if aligned else "*.npz"
+        for npz_file in tqdm(xai_dir.glob(pattern), desc=f"Loading {method}", leave=False):
+            with np.load(npz_file) as archive:
+                if mask_key not in archive:
+                    raise KeyError(f"{npz_file} missing '{mask_key}' array.")
+                mask = archive[mask_key]
+            collapsed = mask.sum(axis=2, dtype=dtype)
+            norm_mask = normalize_mask_0_1(collapsed, dtype=dtype)
+            samples.setdefault(npz_file.stem, {})[method] = norm_mask
+    return samples
+
+def compute_aopc(explainers, return_steps=False):
+    summary = {}
+    step_stats = {} if return_steps else None
+    for name, payload in explainers.items():
+        original = np.asarray(payload["original"])
+        perturbed = np.asarray(payload["perturbed"])
+
+        if original.shape != perturbed.shape:
+            raise ValueError(
+                f"{name}: original and perturbed shapes differ "
+                f"{original.shape} vs {perturbed.shape}"
+            )
+
+        per_step = (original[:, [0]] - perturbed).mean(axis=0)
+        summary[name] = float(per_step.mean())
+        if return_steps:
+            step_stats[name] = per_step
+    return summary, step_stats
+
+
+def normalize_0_1(values, eps=1e-12):
+    values = np.asarray(values, dtype=np.float64)
+    if values.size == 0:
+        return values
+    vmin = float(values.min())
+    vmax = float(values.max())
+    denom = vmax - vmin
+    if denom < eps:
+        return np.ones_like(values)
+    return (values - vmin) / (denom + eps)
+
+
+def normalize_mask_0_1(mask, eps=1e-12, dtype=np.float32):
+    mask = np.asarray(mask, dtype=dtype)
+    finite = np.isfinite(mask)
+    if not finite.any():
+        return np.zeros_like(mask)
+    vmin = float(mask[finite].min())
+    vmax = float(mask[finite].max())
+    denom = vmax - vmin
+    if denom < eps:
+        return np.zeros_like(mask)
+    np.nan_to_num(mask, copy=False, nan=vmin, posinf=vmax, neginf=vmin)
+    mask -= vmin
+    mask /= (denom + eps)
+    return mask
+
+video_dir = Path("experiments") / MODEL_NAME_2 / "icopevid"
+for video in os.listdir(video_dir):
+    video_path = os.path.join(video_dir, video)
+
+    HEATMAP_DIR = video_path / video
+    xai_dirs = [p for p in HEATMAP_DIR.iterdir() if p.is_dir()]
+    samples = load_masks(
+        xai_dirs,
+        mask_key=MASK_KEY,
+        aligned=ALIGN,
+        method_filter=TARGET_EXPLAINERS,
+        dtype=MASK_DTYPE,
+    )
+
+
+    for perturb in PERTURB_TYPE:
+        curves_path = (
+            Path("sdumont_scripts")
+            / f"perturb_pixel_curves_{MODEL_NAME_AUX}_{perturb}_{IMPORTANCE}_{LOAD_TYPE}.pkl"
+        )
+        random_path = (
+            Path("sdumont_scripts")
+            / f"perturb_pixel_curves_{MODEL_NAME_AUX}_{perturb}_random_{LOAD_TYPE}.pkl"
+        )
+
+        if not curves_path.exists():
+            raise FileNotFoundError(f"Explainability curves missing: {curves_path}")
+        if not random_path.exists():
+            raise FileNotFoundError(f"Random baseline curves missing: {random_path}")
+
+        method_curves = pickle.loads(curves_path.read_bytes())
+        random_curves = pickle.loads(random_path.read_bytes())
+        print(f"Loaded curves and random baseline for {perturb}")
+
+        summary, _ = compute_aopc(method_curves)
+        random_summary, _ = compute_aopc(random_curves)
+
+        random_value = next(iter(random_summary.values()))
+        aopc_dicts = {name: value - random_value for name, value in summary.items()}
+        aopc_values = np.array(list(aopc_dicts.values()), dtype=np.float64)
+        aopc_norm_values = normalize_0_1(aopc_values)
+        aopc_norm = dict(zip(aopc_dicts.keys(), aopc_norm_values))
+        #print(aopc_dicts)
+        #aopc_dicts["random"] = 0.0  # keep baseline in the dict (not used in merging unless you add it to TARGET_EXPLAINERS)
+
+        output_root = HEATMAP_DIR / "MERGED_MASKS"
+        output_root.mkdir(parents=True, exist_ok=True)
+
+        for ID, masks in tqdm(samples.items(), desc=f"Merging {perturb}"):
+            if not masks:
+                continue
+            merged_mask = np.zeros_like(next(iter(masks.values())), dtype=MASK_DTYPE)
+
+            weights = np.array([aopc_norm.get(m, 0.0) for m in masks], dtype=MASK_DTYPE)
+            denom = weights.sum()
+            if denom < 1e-12:
+                weights = np.ones_like(weights)
+                denom = weights.sum()
+
+            inv_denom = 1.0 / denom
+            scratch = np.empty_like(merged_mask)
+            for (method, norm_mask), w in zip(masks.items(), weights):
+                weight = w * inv_denom
+                np.multiply(norm_mask, weight, out=scratch)
+                merged_mask += scratch
+
+            merged_mask = normalize_mask_0_1(merged_mask, dtype=merged_mask.dtype)
+
+            np.savez_compressed(output_root / f"{ID}.npz", mask_raw=merged_mask)
