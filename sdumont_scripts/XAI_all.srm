@@ -35,4 +35,4 @@ cd $SCRATCH/AI-Assessment-of-Pain-in-Newborns
 #)&
 
 #Executa
-python sdumont.py
+python sdumont_merge.py
