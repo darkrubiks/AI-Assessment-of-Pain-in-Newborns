@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH --nodes=1           #Numero de Nos
-#SBATCH -p sequana_gpu      #Fila (partition) a ser utilizada
+#SBATCH -p sequana_gpu_dev     #Fila (partition) a ser utilizada
 #SBATCH -J NCNN_XAI
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 12
 #SBATCH --mem 94G
-#SBATCH --time=48:00:00     #Tempo de execucao do job
 
 #Exibe os nós alocados para o Job
 echo $SLURM_JOB_NODELIST
@@ -35,4 +34,4 @@ cd $SCRATCH/AI-Assessment-of-Pain-in-Newborns
 #)&
 
 #Executa
-python sdumont.py
+python sdumont_merge.py
