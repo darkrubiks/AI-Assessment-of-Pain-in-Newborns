@@ -5,10 +5,20 @@ import numpy as np
 from tqdm import tqdm
 import os
 import logging
+import time
 
 PERTURBATION_LEVELS = np.arange(0, 100, 1)
 PERTURB_TYPE = ["impute"]
 
+def format_duration(seconds):
+    seconds = max(0, int(round(seconds)))
+    minutes, sec = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:d}h{minutes:02d}m{sec:02d}s"
+    if minutes:
+        return f"{minutes:d}m{sec:02d}s"
+    return f"{sec:d}s"
 
 for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
     MODEL_NAME_AUX = xx        # "NCNN", "VGGFace", "ViT_B_32"
@@ -28,7 +38,7 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
 
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
+        format="%(message)s",
     )
     logger = logging.getLogger(__name__)
 
@@ -46,7 +56,6 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
             method = xai_dir.name
             if method_filter is not None and method not in method_filter:
                 continue
-            loaded = 0
             pattern = "aligned/*.npz" if aligned else "*.npz"
             for npz_file in tqdm(xai_dir.glob(pattern), desc=f"Loading {method}", leave=False):
                 with np.load(npz_file) as archive:
@@ -56,8 +65,6 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
                 collapsed = mask.sum(axis=2, dtype=dtype)
                 norm_mask = normalize_mask_0_1(collapsed, dtype=dtype)
                 samples.setdefault(npz_file.stem, {})[method] = norm_mask
-                loaded += 1
-            logger.info("Loaded %d masks for method %s from %s", loaded, method, xai_dir)
         return samples
 
     def compute_aopc(explainers, return_steps=False):
@@ -107,24 +114,20 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
         mask /= (denom + eps)
         return mask
 
-    logger.info(
-        "Starting merge: model=%s model_dir=%s align=%s load_type=%s importance=%s",
-        MODEL_NAME_AUX,
-        MODEL_NAME_2,
-        ALIGN,
-        LOAD_TYPE,
-        IMPORTANCE,
-    )
+    logger.info("Model %s (%s)", MODEL_NAME_AUX, MODEL_NAME_2)
+    logger.info("Settings: align=%s load=%s importance=%s", ALIGN, LOAD_TYPE, IMPORTANCE)
 
     video_dir = Path("experiments") / MODEL_NAME_2 / "icopevid"
-    logger.info("Video root: %s", video_dir)
-    for video in os.listdir(video_dir):
+    video_list = list(os.listdir(video_dir))
+    total_videos = len(video_list)
+    model_start = time.perf_counter()
+    logger.info("Videos: %d in %s", total_videos, video_dir)
+    for video_idx, video in enumerate(video_list, start=1):
+        video_start = time.perf_counter()
         HEATMAP_DIR = video_dir / video
 
-        logger.info("Processing video %s", video)
-        logger.info("Heatmap dir: %s", HEATMAP_DIR)
+        logger.info("Video %s (%d/%d)", video, video_idx, total_videos)
         xai_dirs = [p for p in HEATMAP_DIR.iterdir() if p.is_dir()]
-        logger.info("Found %d explainer dirs", len(xai_dirs))
         samples = load_masks(
             xai_dirs,
             mask_key=MASK_KEY,
@@ -133,7 +136,7 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
             dtype=MASK_DTYPE,
         )
         total_masks = sum(len(m) for m in samples.values())
-        logger.info("Loaded %d samples (%d masks total)", len(samples), total_masks)
+        logger.info("Loaded %d samples (%d masks)", len(samples), total_masks)
 
 
         for perturb in PERTURB_TYPE:
@@ -146,8 +149,6 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
                 Path("sdumont_scripts")
                 / f"perturb_pixel_curves_{MODEL_NAME_AUX}_{perturb}_random_{LOAD_TYPE}.pkl"
             )
-            logger.info("Curves path: %s", curves_path)
-            logger.info("Random path: %s", random_path)
 
             if not curves_path.exists():
                 raise FileNotFoundError(f"Explainability curves missing: {curves_path}")
@@ -156,7 +157,7 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
 
             method_curves = pickle.loads(curves_path.read_bytes())
             random_curves = pickle.loads(random_path.read_bytes())
-            print(f"Loaded curves and random baseline for {perturb}")
+            logger.info("Loaded curves and random baseline")
 
             summary, _ = compute_aopc(method_curves)
             random_summary, _ = compute_aopc(random_curves)
@@ -171,7 +172,7 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
 
             output_root = Path("icopevid_XAI") / MODEL_NAME_AUX / video / "MERGED_MASKS"
             output_root.mkdir(parents=True, exist_ok=True)
-            logger.info("Output dir: %s", output_root)
+            logger.info("Output: %s", output_root)
 
             for ID, masks in tqdm(samples.items(), desc=f"Merging {perturb}"):
                 if not masks:
@@ -194,3 +195,16 @@ for xx in ["NCNN", "VGGFace", "ViT_B_32"]:
                 merged_mask = normalize_mask_0_1(merged_mask, dtype=merged_mask.dtype)
 
                 np.savez_compressed(output_root / f"{ID}.npz", mask_raw=merged_mask)
+
+        video_elapsed = time.perf_counter() - video_start
+        model_elapsed = time.perf_counter() - model_start
+        avg_per_video = model_elapsed / video_idx
+        remaining = avg_per_video * (total_videos - video_idx)
+        logger.info(
+            "Done %s in %s | ETA %s",
+            video,
+            format_duration(video_elapsed),
+            format_duration(remaining),
+        )
+
+    logger.info("Model %s done in %s", MODEL_NAME_AUX, format_duration(time.perf_counter() - model_start))
