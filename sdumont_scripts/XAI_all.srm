@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --nodes=1           #Numero de Nos
-#SBATCH --account=mgspim
-#SBATCH --partition=sequana_gpu
+#SBATCH -p sequana_gpu      #Fila (partition) a ser utilizada
 #SBATCH -J NCNN_XAI
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 12
