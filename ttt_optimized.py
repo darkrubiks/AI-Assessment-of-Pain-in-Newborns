@@ -84,9 +84,9 @@ class PainState(IntEnum):
 class StateMachineParams:
     # Thresholds
     theta_1: float                 # pain / no-pain boundary
+    theta_3: float          # uncertainty threshold (sigma)
     theta_2_low: Optional[float] = None
     theta_2_high: Optional[float] = None
-    theta_3: float = 0.15          # uncertainty threshold (sigma)
 
     # Hysteresis (recommended to avoid flicker around theta_1)
     delta_hyst: float = 0.05       # theta_on = theta_1 + delta, theta_off = theta_1 - delta
@@ -94,7 +94,7 @@ class StateMachineParams:
     # Durations (in seconds)
     t_confirm: float = 1.5         # time above theta_on to confirm sustained pain
     t_recover: float = 1.0         # time below theta_off to confirm recovery to no-pain
-    t_uncertain: float = 0.5       # time sigma > theta_3 to enter UNCERTAIN (debounce)
+    t_uncertain: float = 1       # time sigma > theta_3 to enter UNCERTAIN (debounce)
 
     # Transient labeling policy
     transient_enabled: bool = True
@@ -750,8 +750,9 @@ def extract_region_scores_video(
     img_files = _list_frames(video_dir, suffix)
     merged_dir = xai_root / video_dir.name / "MERGED_MASKS"
 
-    rows = []
-    for i in tqdm(range(0, len(img_files), frame_step), desc=f"Frames {video_dir.name}"):
+    indices = list(range(0, len(img_files), frame_step))
+
+    def _process_frame(i: int) -> Dict[str, float]:
         frame_path = img_files[i]
         mesh_path = landmark_dir / f"{frame_path.stem}.pkl"
         if not mesh_path.exists():
@@ -760,8 +761,7 @@ def extract_region_scores_video(
                 "frame_idx": i,
             }
             row.update(_zero_region_scores())
-            rows.append(row)
-            continue
+            return row
 
         mask_path = merged_dir / f"{frame_path.stem}.npz"
         mask = _load_xai_raw_mask(mask_path, mask_key=mask_key)
@@ -787,7 +787,12 @@ def extract_region_scores_video(
             "frame_idx": i,
         }
         row.update(region_scores)
-        rows.append(row)
+        return row
+
+    rows = []
+    rows_append = rows.append
+    for i in tqdm(indices, desc=f"Frames {video_dir.name}"):
+        rows_append(_process_frame(i))
 
     df = pd.DataFrame(rows)
     if df.empty:
@@ -1023,7 +1028,7 @@ def compute_pain_region_correlations(
     per_video: Dict[str, Dict[str, float]] = {}
     all_regions: List[str] = []
 
-    for video_name in results_video.keys():
+    def _compute_for_video(video_name: str) -> Tuple[str, Dict[str, float]]:
         ps = compute_pain_sign(
             results_video[video_name],
             mcdp=mcdp,
@@ -1066,6 +1071,11 @@ def compute_pain_region_correlations(
                     corr = _safe_corr(ps.p_hat, series_interp, method=method, min_samples=min_samples)
                     region_scores[region] = corr
 
+        return video_name, region_scores
+
+    video_names = list(results_video.keys())
+    for video_name in video_names:
+        _, region_scores = _compute_for_video(video_name)
         per_video[video_name] = region_scores
         all_regions.extend(region_scores.keys())
 
