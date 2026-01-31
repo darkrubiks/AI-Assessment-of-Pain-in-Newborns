@@ -67,6 +67,12 @@ class PlotStyle:
     label_size: int = 12
     tick_size: int = 11
 
+    # State machine event styling
+    event_transient_color: str = "#F29E4C"  # Alert Orange
+    event_sustained_color: str = "#D72638"  # Pain Red
+    event_unknown_color: str = "#7F7F7F"    # Neutral gray
+    summary_box_alpha: float = 0.85
+
 
 class PainState(IntEnum):
     STABLE_NO_PAIN = 0
@@ -1198,6 +1204,60 @@ def _build_reliability_parts(
     return parts
 
 
+def _format_state_summary(summary: Dict[str, float]) -> str:
+    if not summary:
+        return ""
+    time_no_pain = summary.get("time_in_no_pain_s", 0.0)
+    time_transition = summary.get("time_in_transition_s", 0.0)
+    time_transient = summary.get("time_in_transient_s", 0.0)
+    time_sustained = summary.get("time_in_sustained_s", 0.0)
+    time_uncertain = summary.get("time_in_uncertain_s", 0.0)
+
+    n_transient = int(summary.get("n_events_transient", 0))
+    n_sustained = int(summary.get("n_events_sustained", 0))
+
+    theta_on = summary.get("theta_on", float("nan"))
+    theta_off = summary.get("theta_off", float("nan"))
+    n_confirm = int(summary.get("n_confirm_frames", 0))
+    n_recover = int(summary.get("n_recover_frames", 0))
+    n_uncertain = int(summary.get("n_uncertain_frames", 0))
+
+    lines = [
+        f"Events: transient={n_transient}, sustained={n_sustained}",
+        (
+            "Time (s): "
+            f"no-pain={time_no_pain:.1f}, transition={time_transition:.1f}, "
+            f"transient={time_transient:.1f}, sustained={time_sustained:.1f}, "
+            f"uncertain={time_uncertain:.1f}"
+        ),
+        f"Params: theta_on={theta_on:.3f}, theta_off={theta_off:.3f}, "
+        f"confirm={n_confirm}f, recover={n_recover}f, uncertain={n_uncertain}f",
+    ]
+    return "\n".join(lines)
+
+
+def _add_state_summary_box(ax, summary: Dict[str, float], style: PlotStyle) -> None:
+    text = _format_state_summary(summary)
+    if not text:
+        return
+    font_size = max(8, int(style.tick_size) - 1)
+    ax.text(
+        0.99,
+        0.02,
+        text,
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=font_size,
+        bbox=dict(
+            boxstyle="round,pad=0.3",
+            facecolor="white",
+            edgecolor=style.grid_color,
+            alpha=style.summary_box_alpha,
+        ),
+    )
+
+
 def _label_strip_rows(ax, rows: int, style: PlotStyle) -> None:
     row_labels = ["Frames", "Frames + XAI"]
     if rows == 3:
@@ -1310,7 +1370,13 @@ def plot_region_importance_stack(
     return ax
 
 
-def _plot_state_timeline(ax, time: np.ndarray, states: np.ndarray, style: PlotStyle) -> None:
+def _plot_state_timeline(
+    ax,
+    time: np.ndarray,
+    states: np.ndarray,
+    style: PlotStyle,
+    events: Optional[List[PainEvent]] = None,
+) -> None:
     if time.size == 0 or states.size == 0:
         return
     for s, e, state in _segments_from_states(states):
@@ -1328,9 +1394,78 @@ def _plot_state_timeline(ax, time: np.ndarray, states: np.ndarray, style: PlotSt
     ax.tick_params(axis="x", labelsize=style.tick_size)
     ax.grid(False, axis="both")
 
+    if events:
+        _plot_state_events(ax, time, events, style)
+
     handles = [plt.Rectangle((0, 0), 1, 1, color=STATE_COLORS[k]) for k in STATE_COLORS]
     labels = [STATE_LABELS[k] for k in STATE_COLORS]
-    ax.legend(handles=handles, labels=labels, loc="upper center", ncol=3, frameon=True, framealpha=0.9, fontsize=9)
+    state_legend = ax.legend(handles=handles, labels=labels, loc="upper center", ncol=3, frameon=True, framealpha=0.9, fontsize=9)
+
+    if events:
+        event_handles, event_labels = _build_event_legend(events, style)
+        if event_handles:
+            event_legend = ax.legend(
+                handles=event_handles,
+                labels=event_labels,
+                loc="upper right",
+                frameon=True,
+                framealpha=0.9,
+                fontsize=9,
+            )
+            ax.add_artist(state_legend)
+
+
+def _event_display(kind: str, style: PlotStyle) -> Tuple[str, str, float]:
+    if kind == "sustained":
+        return "Sustained event", style.event_sustained_color, 0.78
+    if kind == "transient":
+        return "Transient event", style.event_transient_color, 0.22
+    return "Short/unknown event", style.event_unknown_color, 0.5
+
+
+def _plot_state_events(ax, time: np.ndarray, events: List[PainEvent], style: PlotStyle) -> None:
+    if time.size == 0 or not events:
+        return
+    t_min = time.min() if time.size else 0.0
+    t_max = time.max() if time.size else 0.0
+    for event in events:
+        label, color, y = _event_display(event.kind, style)
+        _ = label  # legend handled separately
+
+        if 0 <= event.start_idx < time.size:
+            t0 = time[event.start_idx]
+        else:
+            t0 = t_min
+
+        if 0 <= event.end_idx < time.size:
+            t1 = time[event.end_idx]
+        else:
+            t1 = t_max
+
+        if t1 < t0:
+            t0, t1 = t1, t0
+        if t1 == t0:
+            t1 = t0 + 1e-6
+
+        ax.hlines(y, t0, t1, color=color, lw=2.8)
+        ax.plot([t0, t1], [y, y], marker="|", linestyle="none", color=color, markersize=8)
+
+        if 0 <= event.peak_idx < time.size:
+            ax.plot(time[event.peak_idx], y, marker="o", color=color, markersize=4)
+
+
+def _build_event_legend(events: List[PainEvent], style: PlotStyle) -> Tuple[List, List[str]]:
+    if not events:
+        return [], []
+    kinds = {event.kind for event in events}
+    handles = []
+    labels = []
+    for kind in ["transient", "sustained", "unknown_short"]:
+        if kind in kinds:
+            label, color, _ = _event_display(kind, style)
+            handles.append(plt.Line2D([0], [0], color=color, lw=2.8, marker="o", markersize=4))
+            labels.append(label)
+    return handles, labels
 
 
 def plot_pain_sign(
@@ -1349,14 +1484,14 @@ def plot_pain_sign(
     state_params: Optional[StateMachineParams] = None,
     style: PlotStyle = PlotStyle(),
 ) -> None:
-    """Clinical plot with probability curve, region curves, and frame/XAI strip."""
+    """Clinical plot with probability curve, state machine events/summary, region curves, and frame/XAI strip."""
     time = ps.time_s
     p = ps.p_hat
     sigma = ps.sigma_hat
     state_params = state_params or _default_state_params(thresholds)
     fps = _infer_fps_from_time(time)
     sigma_state = sigma if sigma is not None else np.zeros_like(p)
-    states, _, _ = run_pain_state_machine(p, sigma_state, fps=fps, params=state_params, t=time if time.size else None)
+    states, events, summary = run_pain_state_machine(p, sigma_state, fps=fps, params=state_params, t=time if time.size else None)
 
     region_curves = _prepare_region_curves(
         region_df,
@@ -1414,6 +1549,8 @@ def plot_pain_sign(
         pad=10,
     )
 
+    _add_state_summary_box(ax, summary, style)
+
     handles = [
         plt.Line2D([0], [0], color=style.certain_color, lw=2.2, label="Probability (certain)"),
         plt.Line2D([0], [0], color=style.uncertain_color, lw=2.6, label="Probability (uncertain)"),
@@ -1451,7 +1588,7 @@ def plot_pain_sign(
         ax_state = fig.add_subplot(gs[1], sharex=ax)
         ax_strip = fig.add_subplot(gs[2])
 
-    _plot_state_timeline(ax_state, time, states, style)
+    _plot_state_timeline(ax_state, time, states, style, events=events)
     ax_state.tick_params(labelbottom=False)
     ax_state.set_xlabel("")
 
