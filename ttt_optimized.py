@@ -52,7 +52,7 @@ class PlotStyle:
     uncertain_color: str = "#6A4C93"    # Uncertainty Purple
     ci_color: str = "#6A4C93"           # Uncertainty Purple
     grid_color: str = "#9E9E9E"         # Gray Neutral
-    ci_alpha: float = 0.18
+    ci_alpha: float = 0.0
 
     # Background bands
     band_no_pain_color: str = "#2E86AB"     # Comfort Blue
@@ -61,10 +61,6 @@ class PlotStyle:
     band_ambiguous_alpha: float = 0.0
     band_no_pain_alpha: float = 0.0
     band_pain_alpha: float = 0.0
-
-    # Uncertainty state background
-    uncertain_bg_color: str = "#703C3C"
-    uncertain_bg_alpha: float = 0.35
 
     # Typography
     title_size: int = 14
@@ -93,12 +89,12 @@ class StateMachineParams:
 
     # Durations (in seconds)
     t_confirm: float = 1.5         # time above theta_on to confirm sustained pain
-    t_recover: float = 1.0         # time below theta_off to confirm recovery to no-pain
+    t_recover: float = 1.5         # time below theta_off to confirm recovery to no-pain
     t_uncertain: float = 1       # time sigma > theta_3 to enter UNCERTAIN (debounce)
 
     # Transient labeling policy
     transient_enabled: bool = True
-    t_transient_max: Optional[float] = None  # if None: t_transient_max = t_confirm (exclusive)
+    t_transient_max: Optional[float] = 0.5  # if None: t_transient_max = t_confirm (exclusive)
 
 
 @dataclass
@@ -658,15 +654,15 @@ def _df_from_npz(npz) -> pd.DataFrame:
 
 
 def _load_region_cache(cache_paths: Dict[str, Path]) -> Optional[pd.DataFrame]:
-    #npz_path = cache_paths.get("npz")
-    #if npz_path is not None and npz_path.exists():
-    #    with np.load(npz_path, allow_pickle=True) as data:
-    ##        return _df_from_npz(data)
+    npz_path = cache_paths.get("npz")
+    if npz_path is not None and npz_path.exists():
+        with np.load(npz_path, allow_pickle=True) as data:
+            return _df_from_npz(data)
 
-    #pkl_path = cache_paths.get("pkl")
-    #if pkl_path is not None and pkl_path.exists():
-    #    with pkl_path.open("rb") as f:
-    #        return pickle.load(f)
+    pkl_path = cache_paths.get("pkl")
+    if pkl_path is not None and pkl_path.exists():
+        with pkl_path.open("rb") as f:
+            return pickle.load(f)
 
     return None
 
