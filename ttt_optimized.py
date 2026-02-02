@@ -84,33 +84,32 @@ class PainState(IntEnum):
 
 @dataclass(frozen=True)
 class StateMachineParams:
-    # Thresholds
-    theta_1: float                 # pain / no-pain boundary
-    theta_3: float          # uncertainty threshold (sigma)
-    theta_2_low: Optional[float] = None
-    theta_2_high: Optional[float] = None
+    # Probability thresholds
+    theta1: float                   # nominal pain boundary
+    theta3: float            # uncertainty threshold (sigma)
+    hysteresis_delta: float = 0.05  # hysteresis margin around theta1
 
-    # Hysteresis (recommended to avoid flicker around theta_1)
-    delta_hyst: float = 0.05       # theta_on = theta_1 + delta, theta_off = theta_1 - delta
+    # Uncertainty gating
+    T_uncertain: float = 0.7        # seconds sigma must be > theta3 to enter UNCERTAIN
+    T_reliable: float = 0.4         # seconds sigma must be <= theta3 to exit UNCERTAIN (debounce)
 
-    # Durations (in seconds)
-    t_confirm: float = 1.5         # time above theta_on to confirm sustained pain
-    t_recover: float = 1.5         # time below theta_off to confirm recovery to no-pain
-    t_uncertain: float = 1       # time sigma > theta_3 to enter UNCERTAIN (debounce)
+    # Episode timing
+    T_confirm: float = 1.5          # seconds p must be >= theta_on to confirm sustained pain
+    T_transient_min: float = 0.2    # seconds above theta_on to count as transient (avoid single-frame blips)
+    T_transient_max: float = 1.5    # seconds above theta_on but < T_confirm => transient; if longer => sustained
+    T_recover: float = 1.0          # seconds p must be <= theta_off to recover to no-pain
 
-    # Transient labeling policy
-    transient_enabled: bool = True
-    t_transient_max: Optional[float] = 0.5  # if None: t_transient_max = t_confirm (exclusive)
+    # Transition behavior
+    allow_transition_only_when_reliable: bool = True
 
 
 @dataclass
-class PainEvent:
-    kind: str                       # "transient" or "sustained"
+class Episode:
+    kind: str  # "transient" or "sustained"
     start_idx: int
     end_idx: int
     peak_idx: int
     peak_p: float
-    duration_s: float
 
 
 STATE_COLORS = {
@@ -145,254 +144,264 @@ def interp_curve(signal: Iterable[float]) -> np.ndarray:
     return arr
 
 
-def _to_frames(seconds: float, fps: float) -> int:
-    # ceil to guarantee minimum dwell time
-    return int(np.ceil(seconds * fps))
+def _sec_to_frames(T: float, dt: float) -> int:
+    # At least 1 frame for any positive duration; 0 allowed if T == 0
+    if T <= 0:
+        return 0
+    return max(1, int(np.ceil(T / dt)))
 
 
 def _default_state_params(thresholds: PainSignThresholds) -> StateMachineParams:
     return StateMachineParams(
-        theta_1=thresholds.theta_1,
-        theta_2_low=thresholds.theta_2_low,
-        theta_2_high=thresholds.theta_2_high,
-        theta_3=thresholds.theta_3,
+        theta1=thresholds.theta_1,
+        theta3=thresholds.theta_3,
     )
 
 
 def run_pain_state_machine(
     p: np.ndarray,
     sigma: np.ndarray,
-    fps: float,
+    dt: float,
     params: StateMachineParams,
-    t: Optional[np.ndarray] = None,
-) -> Tuple[np.ndarray, List[PainEvent], Dict[str, float]]:
+    return_episodes: bool = True,
+) -> Tuple[np.ndarray, Dict[str, float], Optional[List[Episode]]]:
     """
-    Online-style deterministic state machine.
+    Online state machine for neonatal pain monitoring with:
+      - uncertainty gating (UNCERTAIN state with debounce)
+      - hysteresis around theta1 (theta_on/theta_off)
+      - transient pain as an explicit state (TRANSIENT_PAIN)
+
     Inputs
-      p     : (T,) mean pain probability
-      sigma : (T,) mean uncertainty (e.g., std from MC dropout)
-      fps   : sampling rate of p/sigma (e.g., 30 if per-frame; 1 if per-second)
-      params: thresholds and duration settings
-      t     : optional timestamps (T,); used only for sanity checks
+    ------
+    p      : (T,) array, pain probability per time step
+    sigma  : (T,) array, uncertainty per time step (same length as p)
+    dt     : sampling interval in seconds
+    params : StateMachineParams
 
-    Outputs
-      states: (T,) int labels (PainState)
-      events: list of PainEvent objects
-      summary: dict with useful aggregates
+    Returns
+    -------
+    states : (T,) int array of PainState codes
+    info   : dict with useful derived thresholds and frame counts
+    episodes (optional): list of detected transient/sustained episodes
     """
-    p = np.asarray(p, dtype=float).copy()
-    sigma = np.asarray(sigma, dtype=float).copy()
-    if p.shape != sigma.shape or p.ndim != 1:
-        raise ValueError("p and sigma must be 1D arrays with the same shape.")
-    if fps <= 0:
-        raise ValueError("fps must be > 0.")
+    p = np.asarray(p, dtype=float).reshape(-1)
+    sigma = np.asarray(sigma, dtype=float).reshape(-1)
+    if p.shape[0] != sigma.shape[0]:
+        raise ValueError(f"p and sigma must have the same length, got {p.shape[0]} vs {sigma.shape[0]}")
+    if dt <= 0:
+        raise ValueError("dt must be > 0")
+
     T = p.shape[0]
-    if t is not None:
-        t = np.asarray(t)
-        if t.shape != (T,):
-            raise ValueError("t must have shape (T,) matching p/sigma.")
+    states = np.empty(T, dtype=int)
 
-    theta_on = params.theta_1 + params.delta_hyst
-    theta_off = params.theta_1 - params.delta_hyst
+    theta_on = params.theta1 + params.hysteresis_delta
+    theta_off = params.theta1 - params.hysteresis_delta
 
-    n_confirm = _to_frames(params.t_confirm, fps)
-    n_recover = _to_frames(params.t_recover, fps)
-    n_uncertain = _to_frames(params.t_uncertain, fps)
+    # Convert seconds -> frames
+    N_uncertain = _sec_to_frames(params.T_uncertain, dt)
+    N_reliable = _sec_to_frames(params.T_reliable, dt)
+    N_confirm = _sec_to_frames(params.T_confirm, dt)
+    N_trans_min = _sec_to_frames(params.T_transient_min, dt)
+    N_trans_max = _sec_to_frames(params.T_transient_max, dt)
+    N_recover = _sec_to_frames(params.T_recover, dt)
 
-    t_transient_max = params.t_transient_max
-    if t_transient_max is None:
-        t_transient_max = params.t_confirm  # transient if it ends before confirm
-    n_transient_max = _to_frames(t_transient_max, fps)
+    # Counters
+    above_on_cnt = 0        # consecutive frames with p >= theta_on (while reliable)
+    below_off_cnt = 0       # consecutive frames with p <= theta_off (while reliable)
+    uncertain_cnt = 0       # consecutive frames with sigma > theta3
+    reliable_cnt = 0        # consecutive frames with sigma <= theta3 (used to exit UNCERTAIN)
 
-    states = np.full(T, PainState.STABLE_NO_PAIN, dtype=int)
+    # Episode bookkeeping
+    episodes: List[Episode] = []
+    current_episode_start: Optional[int] = None
+    current_episode_kind: Optional[str] = None
+    current_peak_idx: Optional[int] = None
+    current_peak_p: float = -np.inf
 
-    # Counters for dwell logic
-    above_on = 0          # consecutive frames with p >= theta_on (reliable)
-    below_off = 0         # consecutive frames with p < theta_off (reliable)
-    uncertain_run = 0     # consecutive frames with sigma > theta_3
+    # State memory for UNCERTAIN return
+    last_non_uncertain_state = PainState.STABLE_NO_PAIN
 
-    # Track last non-UNCERTAIN state for return logic
-    last_base_state = PainState.STABLE_NO_PAIN
-    current_state = PainState.STABLE_NO_PAIN
+    # Initial state
+    state = PainState.STABLE_NO_PAIN
 
-    # Episode tracking
-    episode_active = False
-    episode_start = -1
-    episode_peak_idx = -1
-    episode_peak_p = -np.inf
+    def start_episode(idx: int, kind: str):
+        nonlocal current_episode_start, current_episode_kind, current_peak_idx, current_peak_p
+        current_episode_start = idx
+        current_episode_kind = kind
+        current_peak_idx = idx
+        current_peak_p = p[idx]
 
-    events: List[PainEvent] = []
+    def update_peak(idx: int):
+        nonlocal current_peak_idx, current_peak_p
+        if p[idx] > current_peak_p:
+            current_peak_p = p[idx]
+            current_peak_idx = idx
 
-    def start_episode(i: int):
-        nonlocal episode_active, episode_start, episode_peak_idx, episode_peak_p
-        episode_active = True
-        episode_start = i
-        episode_peak_idx = i
-        episode_peak_p = p[i]
-
-    def update_episode_peak(i: int):
-        nonlocal episode_peak_idx, episode_peak_p
-        if p[i] >= episode_peak_p:
-            episode_peak_p = p[i]
-            episode_peak_idx = i
-
-    def end_episode(i_end: int, kind: str):
-        nonlocal episode_active
-        if not episode_active:
+    def end_episode(end_idx: int):
+        nonlocal current_episode_start, current_episode_kind, current_peak_idx, current_peak_p
+        if current_episode_start is None or current_episode_kind is None or current_peak_idx is None:
             return
-        dur_s = (i_end - episode_start + 1) / fps
-        events.append(
-            PainEvent(
-                kind=kind,
-                start_idx=episode_start,
-                end_idx=i_end,
-                peak_idx=episode_peak_idx,
-                peak_p=float(episode_peak_p),
-                duration_s=float(dur_s),
+        episodes.append(
+            Episode(
+                kind=current_episode_kind,
+                start_idx=current_episode_start,
+                end_idx=end_idx,
+                peak_idx=current_peak_idx,
+                peak_p=float(current_peak_p),
             )
         )
-        episode_active = False
+        current_episode_start = None
+        current_episode_kind = None
+        current_peak_idx = None
+        current_peak_p = -np.inf
 
-    for i in range(T):
-        reliable = sigma[i] <= params.theta_3
-        if not reliable:
-            uncertain_run += 1
+    for t in range(T):
+        # --- Uncertainty gate bookkeeping ---
+        is_uncertain = sigma[t] > params.theta3
+        if is_uncertain:
+            uncertain_cnt += 1
+            reliable_cnt = 0
         else:
-            uncertain_run = 0
+            reliable_cnt += 1
+            uncertain_cnt = 0
 
-        # Enter/Stay UNCERTAIN (debounced)
-        if uncertain_run >= n_uncertain:
-            current_state = PainState.UNCERTAIN
-            states[i] = current_state
-            # Do not update pain dwell counters while uncertain
-            above_on = 0
-            below_off = 0
-            # Note: we do not force-end an episode here; uncertainty can "pause" it visually.
+        # Enter UNCERTAIN if uncertainty persists
+        if state != PainState.UNCERTAIN and uncertain_cnt >= N_uncertain:
+            # Save last reliable state to return to later (but not TRANSIENT if currently mid-episode)
+            last_non_uncertain_state = state if state != PainState.TRANSIENT_PAIN else PainState.TRANSITION
+            state = PainState.UNCERTAIN
+            # Reset probability counters (since we shouldn't trust p while uncertain)
+            above_on_cnt = 0
+            below_off_cnt = 0
+
+        # Exit UNCERTAIN only after stable reliability
+        if state == PainState.UNCERTAIN:
+            states[t] = int(state)
+            # While uncertain, do not evolve pain counters or episode logic
+            if reliable_cnt >= N_reliable:
+                # Return to a conservative state (TRANSITION can be okay; sustained pain should be re-confirmed)
+                state = last_non_uncertain_state
+                above_on_cnt = 0
+                below_off_cnt = 0
             continue
 
-        # If reliable now and we were uncertain previously, return to last base state
-        if states[i - 1] == PainState.UNCERTAIN if i > 0 else False:
-            current_state = last_base_state
+        # If configured, avoid transitions when unreliable but below debounce threshold
+        if params.allow_transition_only_when_reliable and is_uncertain:
+            # We are not in UNCERTAIN yet, but treat this as "do not update"
+            states[t] = int(state)
+            continue
 
-        # Update dwell counters only when reliable
-        if reliable and p[i] >= theta_on:
-            above_on += 1
-            below_off = 0
-        elif reliable and p[i] < theta_off:
-            below_off += 1
-            above_on = 0
+        # --- Probability-based bookkeeping (reliable frames only) ---
+        if p[t] >= theta_on:
+            above_on_cnt += 1
         else:
-            # inside hysteresis band: don't change counters aggressively
-            # keep above_on and below_off as they are (can also decay; leaving stable is fine)
-            pass
+            above_on_cnt = 0
 
-        # Core state logic (hysteresis + durations)
-        if current_state == PainState.STABLE_NO_PAIN:
-            if reliable and p[i] >= theta_on:
-                # start suspected / transition and start episode
-                current_state = PainState.TRANSITION
-                last_base_state = current_state
-                start_episode(i)
-            states[i] = current_state
+        if p[t] <= theta_off:
+            below_off_cnt += 1
+        else:
+            below_off_cnt = 0
 
-        elif current_state == PainState.TRANSITION:
-            last_base_state = current_state
-            if episode_active:
-                update_episode_peak(i)
+        # Update peak if we are in/near an episode
+        if current_episode_start is not None:
+            update_peak(t)
 
-            # Confirm sustained
-            if above_on >= n_confirm:
-                current_state = PainState.SUSTAINED_PAIN
-                last_base_state = current_state
-                states[i] = current_state
-                continue
+        # --- State transitions ---
+        if state == PainState.STABLE_NO_PAIN:
+            # Start looking for pain onset
+            if p[t] >= theta_on:
+                state = PainState.TRANSITION
+                start_episode(t, kind="transient")  # provisional; may be upgraded to sustained later
 
-            # Recover back to no pain
-            if below_off >= n_recover:
-                # If it ended before confirm, label as transient (if enabled)
-                if params.transient_enabled and episode_active:
-                    # Determine episode length; transient if shorter than confirm threshold
-                    ep_len = i - episode_start + 1
-                    if ep_len < n_confirm and ep_len <= n_transient_max:
-                        # Emit transient event and mark current point as transient for visibility
-                        end_episode(i, kind="transient")
-                        current_state = PainState.TRANSIENT_PAIN
-                        states[i] = current_state
-                        # Immediately transition back to stable in subsequent frames once recovered
-                        # (next iterations will drive it to STABLE via below_off)
+        elif state == PainState.TRANSITION:
+            # If we dropped safely below theta_off, abort / recover
+            if below_off_cnt >= N_recover:
+                state = PainState.STABLE_NO_PAIN
+                # If episode was too short, discard; else finalize as transient
+                if current_episode_start is not None:
+                    dur = t - current_episode_start + 1
+                    if dur >= N_trans_min:
+                        end_episode(t)
                     else:
-                        end_episode(i, kind="unknown_short")  # fallback; should be rare
-                        current_state = PainState.STABLE_NO_PAIN
-                        states[i] = current_state
+                        # discard blip
+                        current_episode_start = None
+                        current_episode_kind = None
+                        current_peak_idx = None
+                        current_peak_p = -np.inf
+
+            # If we remain above theta_on long enough: either transient or sustained
+            elif above_on_cnt >= N_trans_min:
+                # If it reaches confirm duration => sustained
+                if above_on_cnt >= N_confirm:
+                    state = PainState.SUSTAINED_PAIN
+                    # Upgrade episode kind
+                    current_episode_kind = "sustained"
+                # If it exceeds transient max but not confirm (shouldn't happen if N_trans_max < N_confirm),
+                # you can still force sustained; keep logic robust:
+                elif above_on_cnt > N_trans_max:
+                    state = PainState.SUSTAINED_PAIN
+                    current_episode_kind = "sustained"
                 else:
-                    # No transient labeling: just drop back
-                    if episode_active:
-                        end_episode(i, kind="unknown_short")
-                    current_state = PainState.STABLE_NO_PAIN
-                    states[i] = current_state
+                    state = PainState.TRANSIENT_PAIN  # explicit state as requested
+
+        elif state == PainState.TRANSIENT_PAIN:
+            # If transient persists and crosses confirmation threshold => sustained
+            if above_on_cnt >= N_confirm:
+                state = PainState.SUSTAINED_PAIN
+                current_episode_kind = "sustained"
+            # If it drops below theta_off for recovery => end transient and go stable
+            elif below_off_cnt >= N_recover:
+                state = PainState.STABLE_NO_PAIN
+                if current_episode_start is not None:
+                    end_episode(t)
             else:
-                states[i] = current_state
+                # If transient duration becomes too long without confirmation, force sustained
+                if current_episode_start is not None:
+                    dur = t - current_episode_start + 1
+                    if dur >= N_trans_max:
+                        state = PainState.SUSTAINED_PAIN
+                        current_episode_kind = "sustained"
 
-        elif current_state == PainState.TRANSIENT_PAIN:
-            # This is a display state to make brief events visible.
-            # Once recovery is confirmed, go back to stable.
-            if below_off >= n_recover:
-                current_state = PainState.STABLE_NO_PAIN
-            last_base_state = current_state if current_state != PainState.TRANSIENT_PAIN else PainState.STABLE_NO_PAIN
-            states[i] = current_state
-
-        elif current_state == PainState.SUSTAINED_PAIN:
-            last_base_state = current_state
-            if episode_active:
-                update_episode_peak(i)
-
-            # Exit sustained pain only after confirmed recovery
-            if below_off >= n_recover:
-                end_episode(i, kind="sustained")
-                current_state = PainState.STABLE_NO_PAIN
-                last_base_state = current_state
-            states[i] = current_state
-
-        elif current_state == PainState.UNCERTAIN:
-            # handled earlier (debounced), but keep for completeness
-            states[i] = current_state
+        elif state == PainState.SUSTAINED_PAIN:
+            # Recover only after stable below theta_off
+            if below_off_cnt >= N_recover:
+                state = PainState.STABLE_NO_PAIN
+                if current_episode_start is not None:
+                    end_episode(t)
 
         else:
-            raise RuntimeError(f"Unknown state: {current_state}")
+            raise RuntimeError(f"Unknown state: {state}")
 
-    # If episode never closed (signal ends during pain-like activity)
-    if episode_active:
-        # Classify by current_state
-        if current_state == PainState.SUSTAINED_PAIN:
-            end_episode(T - 1, kind="sustained")
-        else:
-            # likely transition / short
-            if params.transient_enabled:
-                ep_len = (T - 1) - episode_start + 1
-                if ep_len < n_confirm and ep_len <= n_transient_max:
-                    end_episode(T - 1, kind="transient")
-                else:
-                    end_episode(T - 1, kind="unknown_short")
-            else:
-                end_episode(T - 1, kind="unknown_short")
+        states[t] = int(state)
 
-    # Summary metrics (useful for your thesis)
-    summary = {
-        "time_in_no_pain_s": float(np.sum(states == PainState.STABLE_NO_PAIN) / fps),
-        "time_in_transition_s": float(np.sum(states == PainState.TRANSITION) / fps),
-        "time_in_transient_s": float(np.sum(states == PainState.TRANSIENT_PAIN) / fps),
-        "time_in_sustained_s": float(np.sum(states == PainState.SUSTAINED_PAIN) / fps),
-        "time_in_uncertain_s": float(np.sum(states == PainState.UNCERTAIN) / fps),
-        "n_events_transient": float(sum(e.kind == "transient" for e in events)),
-        "n_events_sustained": float(sum(e.kind == "sustained" for e in events)),
+    # Close any open episode at the end if desired
+    if return_episodes and current_episode_start is not None:
+        # End at last index if it has meaningful duration; otherwise discard
+        dur = (T - 1) - current_episode_start + 1
+        if dur >= N_trans_min:
+            end_episode(T - 1)
+
+    n_transient = sum(e.kind == "transient" for e in episodes)
+    n_sustained = sum(e.kind == "sustained" for e in episodes)
+    info = {
         "theta_on": float(theta_on),
         "theta_off": float(theta_off),
-        "n_confirm_frames": float(n_confirm),
-        "n_recover_frames": float(n_recover),
-        "n_uncertain_frames": float(n_uncertain),
+        "N_uncertain": int(N_uncertain),
+        "N_reliable": int(N_reliable),
+        "N_confirm": int(N_confirm),
+        "N_transient_min": int(N_trans_min),
+        "N_transient_max": int(N_trans_max),
+        "N_recover": int(N_recover),
+        "time_in_no_pain_s": float(np.sum(states == PainState.STABLE_NO_PAIN) * dt),
+        "time_in_transition_s": float(np.sum(states == PainState.TRANSITION) * dt),
+        "time_in_transient_s": float(np.sum(states == PainState.TRANSIENT_PAIN) * dt),
+        "time_in_sustained_s": float(np.sum(states == PainState.SUSTAINED_PAIN) * dt),
+        "time_in_uncertain_s": float(np.sum(states == PainState.UNCERTAIN) * dt),
+        "n_events_transient": float(n_transient),
+        "n_events_sustained": float(n_sustained),
     }
 
-    return states, events, summary
+    return states, info, (episodes if return_episodes else None)
 
 
 REGION_COLOR_MAP = {
@@ -1218,9 +1227,12 @@ def _format_state_summary(summary: Dict[str, float]) -> str:
 
     theta_on = summary.get("theta_on", float("nan"))
     theta_off = summary.get("theta_off", float("nan"))
-    n_confirm = int(summary.get("n_confirm_frames", 0))
-    n_recover = int(summary.get("n_recover_frames", 0))
-    n_uncertain = int(summary.get("n_uncertain_frames", 0))
+    n_confirm = int(summary.get("N_confirm", summary.get("n_confirm_frames", 0)))
+    n_recover = int(summary.get("N_recover", summary.get("n_recover_frames", 0)))
+    n_uncertain = int(summary.get("N_uncertain", summary.get("n_uncertain_frames", 0)))
+    n_reliable = int(summary.get("N_reliable", summary.get("n_reliable_frames", 0)))
+    n_trans_min = int(summary.get("N_transient_min", summary.get("n_transient_min_frames", 0)))
+    n_trans_max = int(summary.get("N_transient_max", summary.get("n_transient_max_frames", 0)))
 
     lines = [
         f"Events: transient={n_transient}, sustained={n_sustained}",
@@ -1231,7 +1243,8 @@ def _format_state_summary(summary: Dict[str, float]) -> str:
             f"uncertain={time_uncertain:.1f}"
         ),
         f"Params: theta_on={theta_on:.3f}, theta_off={theta_off:.3f}, "
-        f"confirm={n_confirm}f, recover={n_recover}f, uncertain={n_uncertain}f",
+        f"confirm={n_confirm}f, transient={n_trans_min}-{n_trans_max}f, "
+        f"recover={n_recover}f, uncertain={n_uncertain}f, reliable={n_reliable}f",
     ]
     return "\n".join(lines)
 
@@ -1375,7 +1388,7 @@ def _plot_state_timeline(
     time: np.ndarray,
     states: np.ndarray,
     style: PlotStyle,
-    events: Optional[List[PainEvent]] = None,
+    episodes: Optional[List[Episode]] = None,
 ) -> None:
     if time.size == 0 or states.size == 0:
         return
@@ -1394,15 +1407,15 @@ def _plot_state_timeline(
     ax.tick_params(axis="x", labelsize=style.tick_size)
     ax.grid(False, axis="both")
 
-    if events:
-        _plot_state_events(ax, time, events, style)
+    if episodes:
+        _plot_state_events(ax, time, episodes, style)
 
     handles = [plt.Rectangle((0, 0), 1, 1, color=STATE_COLORS[k]) for k in STATE_COLORS]
     labels = [STATE_LABELS[k] for k in STATE_COLORS]
     state_legend = ax.legend(handles=handles, labels=labels, loc="upper center", ncol=3, frameon=True, framealpha=0.9, fontsize=9)
 
-    if events:
-        event_handles, event_labels = _build_event_legend(events, style)
+    if episodes:
+        event_handles, event_labels = _build_event_legend(episodes, style)
         if event_handles:
             event_legend = ax.legend(
                 handles=event_handles,
@@ -1423,22 +1436,22 @@ def _event_display(kind: str, style: PlotStyle) -> Tuple[str, str, float]:
     return "Short/unknown event", style.event_unknown_color, 0.5
 
 
-def _plot_state_events(ax, time: np.ndarray, events: List[PainEvent], style: PlotStyle) -> None:
-    if time.size == 0 or not events:
+def _plot_state_events(ax, time: np.ndarray, episodes: List[Episode], style: PlotStyle) -> None:
+    if time.size == 0 or not episodes:
         return
     t_min = time.min() if time.size else 0.0
     t_max = time.max() if time.size else 0.0
-    for event in events:
-        label, color, y = _event_display(event.kind, style)
+    for episode in episodes:
+        label, color, y = _event_display(episode.kind, style)
         _ = label  # legend handled separately
 
-        if 0 <= event.start_idx < time.size:
-            t0 = time[event.start_idx]
+        if 0 <= episode.start_idx < time.size:
+            t0 = time[episode.start_idx]
         else:
             t0 = t_min
 
-        if 0 <= event.end_idx < time.size:
-            t1 = time[event.end_idx]
+        if 0 <= episode.end_idx < time.size:
+            t1 = time[episode.end_idx]
         else:
             t1 = t_max
 
@@ -1450,14 +1463,14 @@ def _plot_state_events(ax, time: np.ndarray, events: List[PainEvent], style: Plo
         ax.hlines(y, t0, t1, color=color, lw=2.8)
         ax.plot([t0, t1], [y, y], marker="|", linestyle="none", color=color, markersize=8)
 
-        if 0 <= event.peak_idx < time.size:
-            ax.plot(time[event.peak_idx], y, marker="o", color=color, markersize=4)
+        if 0 <= episode.peak_idx < time.size:
+            ax.plot(time[episode.peak_idx], y, marker="o", color=color, markersize=4)
 
 
-def _build_event_legend(events: List[PainEvent], style: PlotStyle) -> Tuple[List, List[str]]:
-    if not events:
+def _build_event_legend(episodes: List[Episode], style: PlotStyle) -> Tuple[List, List[str]]:
+    if not episodes:
         return [], []
-    kinds = {event.kind for event in events}
+    kinds = {episode.kind for episode in episodes}
     handles = []
     labels = []
     for kind in ["transient", "sustained", "unknown_short"]:
@@ -1490,8 +1503,9 @@ def plot_pain_sign(
     sigma = ps.sigma_hat
     state_params = state_params or _default_state_params(thresholds)
     fps = _infer_fps_from_time(time)
+    dt = 1.0 / fps if fps > 0 else 1.0
     sigma_state = sigma if sigma is not None else np.zeros_like(p)
-    states, events, summary = run_pain_state_machine(p, sigma_state, fps=fps, params=state_params, t=time if time.size else None)
+    states, summary, episodes = run_pain_state_machine(p, sigma_state, dt=dt, params=state_params, return_episodes=True)
 
     region_curves = _prepare_region_curves(
         region_df,
@@ -1588,7 +1602,7 @@ def plot_pain_sign(
         ax_state = fig.add_subplot(gs[1], sharex=ax)
         ax_strip = fig.add_subplot(gs[2])
 
-    _plot_state_timeline(ax_state, time, states, style, events=events)
+    _plot_state_timeline(ax_state, time, states, style, episodes=episodes)
     ax_state.tick_params(labelbottom=False)
     ax_state.set_xlabel("")
 
