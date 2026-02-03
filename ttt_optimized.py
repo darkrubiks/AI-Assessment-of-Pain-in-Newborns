@@ -12,6 +12,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.stats import entropy
 from matplotlib.gridspec import GridSpec
 from XAI.metrics import create_face_regions_masks, calculate_xai_score
 from XAI.post_processing import kmeans_post_processing
@@ -1153,11 +1154,23 @@ def _infer_fps_from_time(time: np.ndarray) -> float:
     return float(1.0 / np.median(dt))
 
 
-def _theta_crossings(p: np.ndarray, theta_1: float) -> np.ndarray:
+def theta_crossings(p: np.ndarray, theta_1: float) -> np.ndarray:
     return np.where(np.diff((p >= theta_1).astype(int)) != 0)[0]
 
 
-def _infer_true_label(name_for_label: str) -> int:
+def get_hist(signal):
+    return np.histogram(signal, bins=np.linspace(0.0, 1.0, 11))
+
+def get_probs(signal):
+    hist, _ = get_hist(signal)
+    return hist / len(signal)
+
+def get_entropy(signal):
+    pk = get_probs(signal)
+    return entropy(pk, base=2)
+
+
+def infer_true_label(name_for_label: str) -> int:
     return 1 if "Pain" in name_for_label else 0
 
 
@@ -1547,7 +1560,7 @@ def plot_pain_sign(
 
     _add_threshold_lines(ax, time, thresholds, style)
 
-    idx_cross = _theta_crossings(p, thresholds.theta_1)
+    idx_cross = theta_crossings(p, thresholds.theta_1)
     if idx_cross.size:
         ax.scatter(time[idx_cross], np.full(idx_cross.shape, thresholds.theta_1), s=40, color=style.uncertain_color, zorder=5, label="Decision crossings")
 
@@ -1666,7 +1679,7 @@ def run_pain_sign_report(
             xai_alpha=xai_alpha,
         )
 
-        true_label = _infer_true_label(video_name)
+        true_label = infer_true_label(video_name)
         labels.append(true_label)
 
         ps = compute_pain_sign(
@@ -1792,7 +1805,7 @@ def render_pain_sign_animation(
 
     if true_label is None:
         name_for_label = video_name or video_dir.name
-        true_label = _infer_true_label(name_for_label)
+        true_label = infer_true_label(name_for_label)
 
     if include_region_curves and region_df is None:
         try:
@@ -1845,7 +1858,7 @@ def render_pain_sign_animation(
 
     _add_threshold_lines(ax, time, thresholds, style)
 
-    idx_cross = _theta_crossings(p, thresholds.theta_1)
+    idx_cross = theta_crossings(p, thresholds.theta_1)
     cross_scatter = ax.scatter([], [], s=40, color=style.uncertain_color, zorder=5)
 
     _format_prob_axis(ax, time, style, has_regions)
