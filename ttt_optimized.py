@@ -67,6 +67,9 @@ class PlotStyle:
     label_size: int = 12
     tick_size: int = 11
 
+    # Metrics box
+    metrics_box_alpha: float = 0.85
+
 
 
 def interp_curve(signal: Iterable[float]) -> np.ndarray:
@@ -647,6 +650,127 @@ def compute_pain_sign(
     )
 
 
+# ---------------------------------------------------------------------
+# Pain sign metrics
+# ---------------------------------------------------------------------
+
+def _total_duration_s(time_s: np.ndarray) -> float:
+    time_s = np.asarray(time_s, dtype=float).reshape(-1)
+    if time_s.size < 2:
+        return 0.0
+    dt = np.diff(time_s)
+    dt = dt[dt > 0]
+    if dt.size == 0:
+        return 0.0
+    return float(np.sum(dt))
+
+
+def _duration_from_mask(time_s: np.ndarray, mask: np.ndarray) -> float:
+    time_s = np.asarray(time_s, dtype=float).reshape(-1)
+    mask = np.asarray(mask, dtype=bool).reshape(-1)
+    if time_s.size < 2 or mask.size == 0:
+        return 0.0
+    n = min(time_s.size, mask.size)
+    time_s = time_s[:n]
+    mask = mask[:n]
+    dt = np.diff(time_s)
+    if dt.size == 0:
+        return 0.0
+    valid = dt > 0
+    if not np.any(valid):
+        return 0.0
+    return float(np.sum(dt[valid] * mask[:dt.size][valid]))
+
+
+def _count_switches(pain_mask: np.ndarray, no_pain_mask: np.ndarray) -> int:
+    pain_mask = np.asarray(pain_mask, dtype=bool).reshape(-1)
+    no_pain_mask = np.asarray(no_pain_mask, dtype=bool).reshape(-1)
+    n = min(pain_mask.size, no_pain_mask.size)
+    if n == 0:
+        return 0
+    labels = np.full(n, -1, dtype=int)
+    labels[pain_mask[:n]] = 1
+    labels[no_pain_mask[:n]] = 0
+    prev = None
+    switches = 0
+    for label in labels:
+        if label < 0:
+            continue
+        if prev is None:
+            prev = label
+        elif label != prev:
+            switches += 1
+            prev = label
+    return int(switches)
+
+
+def compute_pain_sign_metrics(
+    ps: PainSignResult,
+    thresholds: PainSignThresholds,
+    *,
+    true_label: Optional[int] = None,
+    hysteresis: float = 0.05,
+) -> Dict[str, float]:
+    """
+    Compute time-based metrics for the pain sign.
+
+    Definitions (with hysteresis band around theta_1):
+    - Pain time: p_hat >= theta_1 + hysteresis
+    - No-pain time: p_hat <= theta_1 - hysteresis
+    - Indeterminate time: between those bounds
+    - Uncertainty time: sigma_hat > theta_3
+    - False alarm time: per-sample prediction != true_label (if provided)
+    - Switching rate: transitions between pain and no-pain per second (indeterminate ignored)
+    """
+    time_s = np.asarray(ps.time_s, dtype=float).reshape(-1)
+    p = np.asarray(ps.p_hat, dtype=float).reshape(-1)
+    sigma = None if ps.sigma_hat is None else np.asarray(ps.sigma_hat, dtype=float).reshape(-1)
+
+    if hysteresis < 0:
+        raise ValueError("hysteresis must be >= 0")
+
+    theta_low = thresholds.theta_1 - float(hysteresis)
+    theta_high = thresholds.theta_1 + float(hysteresis)
+
+    pain_mask = p >= theta_high
+    no_pain_mask = p <= theta_low
+    indeterminate_mask = ~(pain_mask | no_pain_mask)
+
+    pain_time_s = _duration_from_mask(time_s, pain_mask)
+    no_pain_time_s = _duration_from_mask(time_s, no_pain_mask)
+    indeterminate_time_s = _duration_from_mask(time_s, indeterminate_mask)
+
+    if sigma is None or sigma.size == 0:
+        uncertainty_time_s = 0.0
+    else:
+        uncertainty_time_s = _duration_from_mask(time_s, sigma > thresholds.theta_3)
+
+    if true_label is None:
+        false_alarm_time_s = float("nan")
+    else:
+        true_label_int = int(true_label)
+        if true_label_int not in (0, 1):
+            raise ValueError("true_label must be 0 or 1")
+        pred_mask = p >= thresholds.theta_1
+        wrong_mask = pred_mask != bool(true_label_int)
+        false_alarm_time_s = _duration_from_mask(time_s, wrong_mask)
+
+    switch_count = _count_switches(pain_mask, no_pain_mask)
+    total_time_s = _total_duration_s(time_s)
+    switching_rate_hz = float(switch_count / total_time_s) if total_time_s > 0 else float("nan")
+
+    return {
+        "total_time_s": float(total_time_s),
+        "pain_time_s": float(pain_time_s),
+        "no_pain_time_s": float(no_pain_time_s),
+        "indeterminate_time_s": float(indeterminate_time_s),
+        "uncertainty_time_s": float(uncertainty_time_s),
+        "false_alarm_time_s": float(false_alarm_time_s),
+        "switch_count": float(switch_count),
+        "switching_rate_hz": float(switching_rate_hz),
+    }
+
+
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -881,6 +1005,59 @@ def _build_reliability_parts(
     return parts
 
 
+def _format_metrics_summary(metrics: Dict[str, float], *, hysteresis: float) -> str:
+    def _fmt_time(val: float) -> str:
+        if val is None or np.isnan(val):
+            return "n/a"
+        return f"{val:.1f}"
+
+    def _fmt_rate(val: float) -> str:
+        if val is None or np.isnan(val):
+            return "n/a"
+        return f"{val:.3f}"
+
+    def _fmt_count(val: float) -> str:
+        if val is None or np.isnan(val):
+            return "n/a"
+        return f"{int(round(val))}"
+
+    pain_time = _fmt_time(metrics.get("pain_time_s", float("nan")))
+    no_pain_time = _fmt_time(metrics.get("no_pain_time_s", float("nan")))
+    indeterminate_time = _fmt_time(metrics.get("indeterminate_time_s", float("nan")))
+    uncertainty_time = _fmt_time(metrics.get("uncertainty_time_s", float("nan")))
+    false_alarm_time = _fmt_time(metrics.get("false_alarm_time_s", float("nan")))
+    switch_count = _fmt_count(metrics.get("switch_count", float("nan")))
+    switch_rate = _fmt_rate(metrics.get("switching_rate_hz", float("nan")))
+
+    lines = [
+        f"Pain time={pain_time}s | No-pain time={no_pain_time}s",
+        f"Indeterminate (±{hysteresis:.2f})={indeterminate_time}s | Uncertainty={uncertainty_time}s",
+        f"False alarm={false_alarm_time}s | Switches={switch_count} ({switch_rate} Hz)",
+    ]
+    return "\n".join(lines)
+
+
+def _add_metrics_summary_box(ax, text: str, style: PlotStyle) -> None:
+    if not text:
+        return
+    font_size = max(8, int(style.tick_size) - 1)
+    ax.text(
+        0.99,
+        0.02,
+        text,
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=font_size,
+        bbox=dict(
+            boxstyle="round,pad=0.3",
+            facecolor="white",
+            edgecolor=style.grid_color,
+            alpha=style.metrics_box_alpha,
+        ),
+    )
+
+
 def _label_strip_rows(ax, rows: int, style: PlotStyle) -> None:
     row_labels = ["Frames", "Frames + XAI"]
     if rows == 3:
@@ -1012,6 +1189,8 @@ def plot_pain_sign(
     time = ps.time_s
     p = ps.p_hat
     sigma = ps.sigma_hat
+    metrics_hysteresis = 0.05
+    metrics = compute_pain_sign_metrics(ps, thresholds, true_label=true_label, hysteresis=metrics_hysteresis)
 
     region_curves = _prepare_region_curves(
         region_df,
@@ -1068,6 +1247,9 @@ def plot_pain_sign(
         fontsize=style.title_size,
         pad=10,
     )
+
+    metrics_text = _format_metrics_summary(metrics, hysteresis=metrics_hysteresis)
+    _add_metrics_summary_box(ax, metrics_text, style)
 
     handles = [
         plt.Line2D([0], [0], color=style.certain_color, lw=2.2, label="Probability (certain)"),
