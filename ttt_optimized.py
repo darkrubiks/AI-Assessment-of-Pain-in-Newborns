@@ -70,6 +70,13 @@ class PlotStyle:
     # Metrics box
     metrics_box_alpha: float = 0.85
 
+    # Pain sign category shading
+    category_alpha: float = 0.12
+    category_stable_color: str = "#2E7D32"         # Stable Green
+    category_irregular_color: str = "#F9A825"      # Irregular Amber
+    category_unstable_color: str = "#C62828"       # Unstable Red
+    category_indeterminate_color: str = "#6A4C93"  # Indeterminate Purple
+
 
 
 def interp_curve(signal: Iterable[float]) -> np.ndarray:
@@ -583,6 +590,29 @@ class PainSignResult:
     pred_label: int                 # 0/1 based on theta_1
 
 
+@dataclass(frozen=True)
+class PainSignCategoryConfig:
+    """Heuristic configuration for windowed pain sign categorization."""
+    # Sliding window length (seconds) used to analyze local behavior.
+    window_s: float = 5.0
+    # Minimum samples required in a window; avoids decisions on tiny windows.
+    window_min_samples: int = 10
+    # Half-width around theta_1 that defines the indeterminate band.
+    hysteresis: float = 0.05
+    # Fraction of samples that must be above/below theta_1 to be "mostly" one side.
+    dominant_fraction: float = 0.8
+    # If >= this fraction is inside theta_1 ± hysteresis, label Indeterminate.
+    indeterminate_fraction: float = 0.35
+    # If >= this fraction has sigma > theta_3, label Indeterminate.
+    uncertain_fraction: float = 0.35
+    # Stability heuristics: low variability, low entropy, few crossings.
+    stable_std_max: float = 0.05
+    stable_entropy_max: float = 0.35
+    stable_crossings_max: int = 0
+    # If crossings per second exceed this, label Unstable.
+    unstable_switch_rate_hz: float = 3/window_s
+
+
 def compute_pain_sign(
     video_results: Dict,
     *,
@@ -771,6 +801,152 @@ def compute_pain_sign_metrics(
     }
 
 
+# ---------------------------------------------------------------------
+# Pain sign categorization (windowed)
+# ---------------------------------------------------------------------
+
+PAIN_SIGN_CATEGORIES = ("stable", "irregular", "unstable", "indeterminate")
+
+
+def _window_len_from_time(time_s: np.ndarray, window_s: float, min_samples: int) -> int:
+    time_s = np.asarray(time_s, dtype=float).reshape(-1)
+    if time_s.size <= 1:
+        return int(time_s.size)
+    # Estimate sampling period from time_s to convert seconds -> samples.
+    dt = np.diff(time_s)
+    dt = dt[dt > 0]
+    if dt.size == 0:
+        return max(int(min_samples), 1)
+    dt_med = float(np.median(dt))
+    if not np.isfinite(dt_med) or dt_med <= 0:
+        return max(int(min_samples), 1)
+    window_n = int(round(float(window_s) / dt_med))
+    window_n = max(int(min_samples), window_n)
+    return min(int(window_n), int(time_s.size))
+
+
+def _normalized_entropy(signal: np.ndarray, *, bins: int = 10) -> float:
+    signal = np.asarray(signal, dtype=float).reshape(-1)
+    if signal.size == 0:
+        return 0.0
+    # Normalized entropy of the signal histogram (0=peaked, 1=uniform).
+    hist, _ = np.histogram(signal, bins=np.linspace(0.0, 1.0, int(bins) + 1))
+    total = float(hist.sum())
+    if total <= 0:
+        return 0.0
+    pk = hist / total
+    ent = float(entropy(pk, base=2))
+    max_ent = np.log2(float(bins))
+    return float(ent / max_ent) if max_ent > 0 else 0.0
+
+
+def categorize_pain_sign_windows(
+    time_s: np.ndarray,
+    p_hat: np.ndarray,
+    sigma_hat: Optional[np.ndarray],
+    thresholds: PainSignThresholds,
+    *,
+    config: PainSignCategoryConfig = PainSignCategoryConfig(),
+) -> np.ndarray:
+    """Categorize pain sign into Stable/Irregular/Unstable/Indeterminate using sliding windows."""
+    time_s = np.asarray(time_s, dtype=float).reshape(-1)
+    p_hat = np.asarray(p_hat, dtype=float).reshape(-1)
+    if sigma_hat is None:
+        sigma = None
+    else:
+        sigma = np.asarray(sigma_hat, dtype=float).reshape(-1)
+
+    n = p_hat.size
+    if n == 0:
+        return np.array([], dtype=object)
+
+    # Window size in samples; centered window around each time index.
+    window_n = _window_len_from_time(time_s, config.window_s, config.window_min_samples)
+    half = max(1, window_n // 2)
+
+    # Hysteresis band around theta_1 defines the indeterminate zone.
+    theta_low = thresholds.theta_1 - float(config.hysteresis)
+    theta_high = thresholds.theta_1 + float(config.hysteresis)
+
+    categories = np.full(n, "indeterminate", dtype=object)
+
+    for i in range(n):
+        # Local window [start:end) around current index.
+        start = max(0, i - half)
+        end = min(n, i + half + 1)
+
+        p_win = p_hat[start:end]
+        if np.all(np.isnan(p_win)):
+            categories[i] = "indeterminate"
+            continue
+        # Fill missing values inside the window to avoid NaN-driven artifacts.
+        p_win = interp_curve(p_win)
+
+        if p_win.size < max(1, int(config.window_min_samples)):
+            categories[i] = "indeterminate"
+            continue
+
+        time_win = time_s[start:end]
+        if time_win.size > 1:
+            win_time = float(time_win[-1] - time_win[0])
+        else:
+            win_time = 0.0
+
+        # Dominance: mostly above/below theta_1?
+        above_theta = float(np.mean(p_win >= thresholds.theta_1))
+        below_theta = float(np.mean(p_win < thresholds.theta_1))
+        dominant = max(above_theta, below_theta)
+
+        # Indeterminate if too much time lies inside the hysteresis band.
+        in_band = float(np.mean((p_win > theta_low) & (p_win < theta_high)))
+        # Variability metrics for stable vs irregular.
+        std_p = float(np.std(p_win))
+        ent_p = _normalized_entropy(p_win)
+
+        # Crossing count and switching rate quantify rapid alternation.
+        crossings = int(np.sum(np.diff((p_win >= thresholds.theta_1).astype(int)) != 0))
+        if win_time > 0:
+            switch_rate = float(crossings / win_time)
+        else:
+            switch_rate = float(crossings / max(p_win.size - 1, 1))
+
+        # Uncertainty fraction uses sigma_hat (if available).
+        if sigma is not None and sigma.size:
+            sigma_win = sigma[start:end]
+            sigma_win = sigma_win[np.isfinite(sigma_win)]
+            if sigma_win.size:
+                uncertain_fraction = float(np.mean(sigma_win > thresholds.theta_3))
+            else:
+                uncertain_fraction = 0.0
+        else:
+            uncertain_fraction = 0.0
+
+        # Decision logic:
+        # 1) Indeterminate if in-band or uncertainty is large.
+        # 2) Unstable if switching is fast.
+        # 3) Stable if mostly one side AND low variability; otherwise Irregular.
+        if in_band >= config.indeterminate_fraction or uncertain_fraction >= config.uncertain_fraction:
+            category = "indeterminate"
+        elif switch_rate >= config.unstable_switch_rate_hz:
+            category = "unstable"
+        else:
+            if dominant >= config.dominant_fraction:
+                if (
+                    std_p <= config.stable_std_max
+                    and ent_p <= config.stable_entropy_max
+                    and crossings <= int(config.stable_crossings_max)
+                ):
+                    category = "stable"
+                else:
+                    category = "irregular"
+            else:
+                category = "irregular"
+
+        categories[i] = category
+
+    return categories
+
+
 
 # ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
@@ -931,6 +1107,87 @@ def _segments_from_mask(mask: np.ndarray) -> List[Tuple[int, int]]:
     if m[-1] == 1:
         ends = np.r_[ends, len(m)]
     return list(zip(starts, ends))
+
+
+def _segments_from_labels(labels: np.ndarray) -> List[Tuple[int, int, str]]:
+    """Convert label array into contiguous [start, end) segments with label."""
+    if labels is None:
+        return []
+    labels = np.asarray(labels, dtype=object).reshape(-1)
+    if labels.size == 0:
+        return []
+
+    segments: List[Tuple[int, int, str]] = []
+    start = 0
+    current = labels[0]
+    for i in range(1, labels.size):
+        if labels[i] != current:
+            segments.append((start, i, str(current)))
+            start = i
+            current = labels[i]
+    segments.append((start, labels.size, str(current)))
+    return segments
+
+
+def _time_edges(time_s: np.ndarray) -> np.ndarray:
+    time_s = np.asarray(time_s, dtype=float).reshape(-1)
+    if time_s.size == 0:
+        return np.array([], dtype=float)
+    if time_s.size == 1:
+        return np.array([time_s[0] - 0.5, time_s[0] + 0.5], dtype=float)
+    mid = (time_s[:-1] + time_s[1:]) / 2.0
+    first = time_s[0] - (time_s[1] - time_s[0]) / 2.0
+    last = time_s[-1] + (time_s[-1] - time_s[-2]) / 2.0
+    return np.r_[first, mid, last]
+
+
+def _category_color_map(style: PlotStyle) -> Dict[str, str]:
+    return {
+        "stable": style.category_stable_color,
+        "irregular": style.category_irregular_color,
+        "unstable": style.category_unstable_color,
+        "indeterminate": style.category_indeterminate_color,
+    }
+
+
+def _add_category_shading(
+    ax,
+    time_s: np.ndarray,
+    categories: np.ndarray,
+    style: PlotStyle,
+) -> None:
+    if time_s.size == 0 or categories is None or len(categories) == 0:
+        return
+    edges = _time_edges(time_s)
+    color_map = _category_color_map(style)
+    for start, end, label in _segments_from_labels(categories):
+        if start >= end:
+            continue
+        color = color_map.get(label, style.category_indeterminate_color)
+        ax.axvspan(edges[start], edges[end], color=color, alpha=style.category_alpha, lw=0, zorder=0.1)
+
+
+def _draw_category_strip(
+    ax,
+    time_s: np.ndarray,
+    categories: np.ndarray,
+    style: PlotStyle,
+) -> None:
+    """Render a one-row color strip for category labels."""
+    if time_s.size == 0 or categories is None or len(categories) == 0:
+        ax.axis("off")
+        return
+
+    color_map = _category_color_map(style)
+    rgb_colors = np.array(
+        [matplotlib.colors.to_rgb(color_map.get(str(c), style.category_indeterminate_color)) for c in categories],
+        dtype=float,
+    )
+    strip = rgb_colors.reshape(1, -1, 3)
+    ax.imshow(strip, aspect="auto", extent=[time_s.min(), time_s.max(), 0, 1])
+    ax.set_yticks([])
+    ax.set_ylabel("Category", fontsize=style.label_size)
+    ax.tick_params(axis="x", labelsize=style.tick_size)
 
 
 def theta_crossings(p: np.ndarray, theta_1: float) -> np.ndarray:
@@ -1184,6 +1441,9 @@ def plot_pain_sign(
     region_selection: str = "mean",
     region_smooth_window: int = 30,
     style: PlotStyle = PlotStyle(),
+    category_config: PainSignCategoryConfig = PainSignCategoryConfig(),
+    show_category_shading: bool = True,
+    show_category_strip: bool = True,
 ) -> None:
     """Clinical plot with probability curve, region curves, and frame/XAI strip."""
     time = ps.time_s
@@ -1202,15 +1462,35 @@ def plot_pain_sign(
     has_regions = region_curves is not None
 
     if has_regions:
-        fig = plt.figure(figsize=(16, 9))
-        gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.0, 1.8, 2.0], hspace=0.12)
+        if show_category_strip:
+            fig = plt.figure(figsize=(16, 9.6))
+            gs = GridSpec(nrows=4, ncols=1, height_ratios=[3.0, 0.35, 1.8, 2.0], hspace=0.12)
+        else:
+            fig = plt.figure(figsize=(16, 9))
+            gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.0, 1.8, 2.0], hspace=0.12)
     else:
-        fig = plt.figure(figsize=(16, 7.5))
-        gs = GridSpec(nrows=2, ncols=1, height_ratios=[3.2, 2.0], hspace=0.12)
+        if show_category_strip:
+            fig = plt.figure(figsize=(16, 8.0))
+            gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.2, 0.35, 2.0], hspace=0.12)
+        else:
+            fig = plt.figure(figsize=(16, 7.5))
+            gs = GridSpec(nrows=2, ncols=1, height_ratios=[3.2, 2.0], hspace=0.12)
 
     ax = fig.add_subplot(gs[0])
 
     _add_background_bands(ax, thresholds, style)
+
+    categories = None
+    if show_category_shading or show_category_strip:
+        categories = categorize_pain_sign_windows(
+            time_s=time,
+            p_hat=p,
+            sigma_hat=sigma,
+            thresholds=thresholds,
+            config=category_config,
+        )
+        if show_category_shading:
+            _add_category_shading(ax, time, categories, style)
 
     if sigma is not None:
         upper = np.clip(p + sigma, 0, 1)
@@ -1257,10 +1537,25 @@ def plot_pain_sign(
     ]
     if sigma is not None:
         handles.append(plt.Rectangle((0, 0), 1, 1, color=style.ci_color, alpha=style.ci_alpha, label="+/- sigma band"))
+    if show_category_shading:
+        color_map = _category_color_map(style)
+        handles.extend([
+            plt.Rectangle((0, 0), 1, 1, color=color_map["stable"], alpha=style.category_alpha, label="Stable"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["irregular"], alpha=style.category_alpha, label="Irregular"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["unstable"], alpha=style.category_alpha, label="Unstable"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["indeterminate"], alpha=style.category_alpha, label="Indeterminate"),
+        ])
     ax.legend(handles=handles, loc="upper left", frameon=True, framealpha=0.9)
 
+    if show_category_strip:
+        axc = fig.add_subplot(gs[1], sharex=ax)
+        _draw_category_strip(axc, time, categories, style)
+        axc.tick_params(labelbottom=False)
+    else:
+        axc = None
+
     if has_regions and region_curves is not None:
-        axr = fig.add_subplot(gs[1], sharex=ax)
+        axr = fig.add_subplot(gs[2] if show_category_strip else gs[1], sharex=ax)
         region_dict = {region: region_curves.data[:, idx] for idx, region in enumerate(region_curves.labels)}
         default_colors = plt.cm.get_cmap("tab20", len(region_curves.labels))
         region_colors = [REGION_COLOR_MAP.get(region, default_colors(idx)) for idx, region in enumerate(region_curves.labels)]
@@ -1282,9 +1577,9 @@ def plot_pain_sign(
         axr.set_ylim(0, 1)
         if time.size:
             axr.set_xlim(time.min(), time.max())
-        ax_strip = fig.add_subplot(gs[2])
+        ax_strip = fig.add_subplot(gs[3] if show_category_strip else gs[2])
     else:
-        ax_strip = fig.add_subplot(gs[1])
+        ax_strip = fig.add_subplot(gs[2] if show_category_strip else gs[1])
 
     ax_strip.imshow(strip_img)
     ax_strip.axis("off")
