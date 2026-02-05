@@ -1,5 +1,5 @@
 import csv
-import os
+from pathlib import Path
 from typing import List, Tuple
 
 import cv2
@@ -72,7 +72,7 @@ def load_config(config_file: str) -> dict:
     """
     Loads a .yaml configuration file.
     """
-    with open(config_file, 'r') as file:
+    with open(Path(config_file), 'r', encoding='utf-8') as file:
         config = yaml.safe_load(file)
         
     return config
@@ -83,9 +83,10 @@ def write_to_csv(filename, **kwargs):
     Writes information to .csv file. If file already exists data will
     be appended.
     """
-    mode = 'a' if os.path.exists(filename) else 'w'
+    file_path = Path(filename)
+    mode = 'a' if file_path.exists() else 'w'
  
-    with open(filename, mode, newline='') as file:
+    with open(file_path, mode, newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if mode == 'w':
             writer.writerow(kwargs.keys())  # Write header row if the file is new
@@ -96,7 +97,4 @@ def create_folder(path):
     """
     Tries to create a folder on the informed path.
     """
-    try:
-        os.makedirs(path)
-    except FileExistsError:
-        pass
+    Path(path).mkdir(parents=True, exist_ok=True)

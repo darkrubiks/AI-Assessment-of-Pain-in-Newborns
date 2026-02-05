@@ -9,7 +9,7 @@ together with the Perception Heatmaps from UNIFESP. The files are renamed to the
 following pattern: {ID}_{DATASET}_{SUBJECT}_{CLASSIFICATION}.
 """
 
-import os
+from pathlib import Path
 from shutil import copyfile, rmtree
 import logging
 import pandas as pd
@@ -25,10 +25,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Read CSV files
-iCOPE_UNIFESP_data = pd.read_csv("iCOPE+UNIFESP_data.csv")
-UNIFESP_percep_data = pd.read_csv("UNIFESP_percep_heatmaps.csv")
+iCOPE_UNIFESP_data = pd.read_csv(Path("iCOPE+UNIFESP_data.csv"))
+UNIFESP_percep_data = pd.read_csv(Path("UNIFESP_percep_heatmaps.csv"))
 
-path_new_dataset = os.path.join("Datasets", "NewDataset")
+path_new_dataset = Path("Datasets") / "NewDataset"
 
 # Remove existing dataset directory if it exists
 try:
@@ -39,20 +39,20 @@ except Exception as e:
 
 logger.info("Creating dataset directories...")
 create_folder(path_new_dataset)
-create_folder(os.path.join(path_new_dataset, "Images"))
-create_folder(os.path.join(path_new_dataset, "Heatmaps"))
+create_folder(path_new_dataset / "Images")
+create_folder(path_new_dataset / "Heatmaps")
 logger.info(f"Created directories: {path_new_dataset}, Images, Heatmaps")
 
 logger.info("Copying image files...")
 for idx, row in iCOPE_UNIFESP_data.iterrows():
-    src_file = os.path.join(row["file_name"])
-    dst_file = os.path.join(path_new_dataset, "Images", row["new_file_name"])
+    src_file = Path(row["file_name"])
+    dst_file = path_new_dataset / "Images" / row["new_file_name"]
     copyfile(src_file, dst_file)
 logger.info("Completed copying image files.")
 
 logger.info("Copying heatmap files...")
 for idx, row in UNIFESP_percep_data.iterrows():
-    src_file = os.path.join(row["heatmap_file_name"])
-    dst_file = os.path.join(path_new_dataset, "Heatmaps", row["new_percep_file_name"])
+    src_file = Path(row["heatmap_file_name"])
+    dst_file = path_new_dataset / "Heatmaps" / row["new_percep_file_name"]
     copyfile(src_file, dst_file)
 logger.info("Completed copying heatmap files.")
