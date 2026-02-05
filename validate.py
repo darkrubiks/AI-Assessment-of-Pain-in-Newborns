@@ -7,6 +7,8 @@ Date: 12/07/2022
 Code for validating Deep Learning models.
 """
 
+from pathlib import Path
+from typing import Union
 import numpy as np
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
@@ -105,7 +107,7 @@ def validation_plots(preds: np.ndarray,
                      probs: np.ndarray,
                      labels: np.ndarray,
                      mode: str='uniform',
-                     path: str=os.getcwd()) -> None:
+                     path: Union[str, Path]=Path.cwd()) -> None:
     """
     Creates all the available plots for validation.
 
