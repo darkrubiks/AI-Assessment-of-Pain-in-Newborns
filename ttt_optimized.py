@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import entropy
+from scipy.signal import find_peaks
 from matplotlib.gridspec import GridSpec
 from XAI.metrics import create_face_regions_masks, calculate_xai_score
 from XAI.post_processing import kmeans_post_processing
@@ -38,10 +39,10 @@ class PainSignThresholds:
 def get_thresholds_for_model(model_name: str) -> PainSignThresholds:
     # Keep your current values, but isolate them here.
     if "NCNN" in model_name:
-        return PainSignThresholds(theta_1=0.4551, theta_3=0.1186, theta_2_low=0.2, theta_2_high=0.8)
+        return PainSignThresholds(theta_1=0.4551, theta_3=0.1186*1.5, theta_2_low=0.2, theta_2_high=0.8)
     if "VGGFace" in model_name:
-        return PainSignThresholds(theta_1=0.5013, theta_3=0.0621, theta_2_low=0.2, theta_2_high=0.8)
-    return PainSignThresholds(theta_1=0.4743, theta_3=0.0130, theta_2_low=0.2, theta_2_high=0.8)
+        return PainSignThresholds(theta_1=0.5013, theta_3=0.0621*1.5, theta_2_low=0.2, theta_2_high=0.8)
+    return PainSignThresholds(theta_1=0.4743, theta_3=0.0130*1.5, theta_2_low=0.2, theta_2_high=0.8)
 
 
 @dataclass(frozen=True)
@@ -594,7 +595,7 @@ class PainSignResult:
 class PainSignCategoryConfig:
     """Heuristic configuration for windowed pain sign categorization."""
     # Sliding window length (seconds) used to analyze local behavior.
-    window_s: float = 5.0
+    window_s: float = 3.0
     # Minimum samples required in a window; avoids decisions on tiny windows.
     window_min_samples: int = 10
     # Half-width around theta_1 that defines the indeterminate band.
@@ -606,7 +607,6 @@ class PainSignCategoryConfig:
     # If >= this fraction has sigma > theta_3, label Indeterminate.
     uncertain_fraction: float = 0.35
     # Stability heuristics: low variability, low entropy, few crossings.
-    stable_std_max: float = 0.05
     stable_entropy_max: float = 0.35
     stable_crossings_max: int = 0
     # If crossings per second exceed this, label Unstable.
@@ -860,9 +860,8 @@ def categorize_pain_sign_windows(
     if n == 0:
         return np.array([], dtype=object)
 
-    # Window size in samples; centered window around each time index.
+    # Window size in samples; causal window (past only) at each time index.
     window_n = _window_len_from_time(time_s, config.window_s, config.window_min_samples)
-    half = max(1, window_n // 2)
 
     # Hysteresis band around theta_1 defines the indeterminate zone.
     theta_low = thresholds.theta_1 - float(config.hysteresis)
@@ -871,9 +870,9 @@ def categorize_pain_sign_windows(
     categories = np.full(n, "indeterminate", dtype=object)
 
     for i in range(n):
-        # Local window [start:end) around current index.
-        start = max(0, i - half)
-        end = min(n, i + half + 1)
+        # Causal window [start:end): uses only history up to current index i.
+        start = max(0, i - window_n + 1)
+        end = i + 1
 
         p_win = p_hat[start:end]
         if np.all(np.isnan(p_win)):
@@ -900,7 +899,6 @@ def categorize_pain_sign_windows(
         # Indeterminate if too much time lies inside the hysteresis band.
         in_band = float(np.mean((p_win > theta_low) & (p_win < theta_high)))
         # Variability metrics for stable vs irregular.
-        std_p = float(np.std(p_win))
         ent_p = _normalized_entropy(p_win)
 
         # Crossing count and switching rate quantify rapid alternation.
@@ -925,15 +923,14 @@ def categorize_pain_sign_windows(
         # 1) Indeterminate if in-band or uncertainty is large.
         # 2) Unstable if switching is fast.
         # 3) Stable if mostly one side AND low variability; otherwise Irregular.
-        if in_band >= config.indeterminate_fraction or uncertain_fraction >= config.uncertain_fraction:
+        if in_band >= config.indeterminate_fraction:
             category = "indeterminate"
         elif switch_rate >= config.unstable_switch_rate_hz:
             category = "unstable"
         else:
             if dominant >= config.dominant_fraction:
                 if (
-                    std_p <= config.stable_std_max
-                    and ent_p <= config.stable_entropy_max
+                    ent_p <= config.stable_entropy_max
                     and crossings <= int(config.stable_crossings_max)
                 ):
                     category = "stable"
@@ -1189,6 +1186,22 @@ def _draw_category_strip(
     ax.set_ylabel("Category", fontsize=style.label_size)
     ax.tick_params(axis="x", labelsize=style.tick_size)
 
+    color_map = _category_color_map(style)
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=color_map["stable"], alpha=0.9, label="Stable"),
+        plt.Rectangle((0, 0), 1, 1, color=color_map["irregular"], alpha=0.9, label="Irregular"),
+        plt.Rectangle((0, 0), 1, 1, color=color_map["unstable"], alpha=0.9, label="Unstable"),
+        plt.Rectangle((0, 0), 1, 1, color=color_map["indeterminate"], alpha=0.9, label="Indeterminate"),
+    ]
+    ax.legend(
+        handles=handles,
+        loc="center left",
+        bbox_to_anchor=(1.005, 0.5),
+        ncol=1,
+        frameon=True,
+        fontsize=max(8, style.tick_size - 1),
+    )
+
 
 def theta_crossings(p: np.ndarray, theta_1: float) -> np.ndarray:
     return np.where(np.diff((p >= theta_1).astype(int)) != 0)[0]
@@ -1204,7 +1217,6 @@ def get_probs(signal):
 def get_entropy(signal):
     pk = get_probs(signal)
     return entropy(pk, base=2)
-
 
 def infer_true_label(name_for_label: str) -> int:
     return 1 if "Pain" in name_for_label else 0
@@ -1442,7 +1454,6 @@ def plot_pain_sign(
     region_smooth_window: int = 30,
     style: PlotStyle = PlotStyle(),
     category_config: PainSignCategoryConfig = PainSignCategoryConfig(),
-    show_category_shading: bool = True,
     show_category_strip: bool = True,
 ) -> None:
     """Clinical plot with probability curve, region curves, and frame/XAI strip."""
@@ -1481,7 +1492,7 @@ def plot_pain_sign(
     _add_background_bands(ax, thresholds, style)
 
     categories = None
-    if show_category_shading or show_category_strip:
+    if show_category_strip:
         categories = categorize_pain_sign_windows(
             time_s=time,
             p_hat=p,
@@ -1489,26 +1500,8 @@ def plot_pain_sign(
             thresholds=thresholds,
             config=category_config,
         )
-        if show_category_shading:
-            _add_category_shading(ax, time, categories, style)
 
-    if sigma is not None:
-        upper = np.clip(p + sigma, 0, 1)
-        lower = np.clip(p - sigma, 0, 1)
-        ax.fill_between(time, lower, upper, color=style.ci_color, alpha=style.ci_alpha, edgecolor="none", label="Uncertainty band (+/- sigma)")
-
-    if sigma is not None:
-        certain = sigma <= thresholds.theta_3
-    else:
-        certain = np.ones_like(p, dtype=bool)
-
-    certain_segs = _segments_from_mask(certain)
-    uncertain_segs = _segments_from_mask(~certain)
-
-    for s, e in certain_segs:
-        ax.plot(time[s:e], p[s:e], color=style.certain_color, lw=2.2, solid_capstyle="round")
-    for s, e in uncertain_segs:
-        ax.plot(time[s:e], p[s:e], color=style.uncertain_color, lw=2.6, solid_capstyle="round")
+    ax.plot(time, p, color=style.signal_color, lw=2.4, solid_capstyle="round")
 
     _add_threshold_lines(ax, time, thresholds, style)
 
@@ -1532,19 +1525,8 @@ def plot_pain_sign(
     _add_metrics_summary_box(ax, metrics_text, style)
 
     handles = [
-        plt.Line2D([0], [0], color=style.certain_color, lw=2.2, label="Probability (certain)"),
-        plt.Line2D([0], [0], color=style.uncertain_color, lw=2.6, label="Probability (uncertain)"),
+        plt.Line2D([0], [0], color=style.signal_color, lw=2.4, label="Pain probability"),
     ]
-    if sigma is not None:
-        handles.append(plt.Rectangle((0, 0), 1, 1, color=style.ci_color, alpha=style.ci_alpha, label="+/- sigma band"))
-    if show_category_shading:
-        color_map = _category_color_map(style)
-        handles.extend([
-            plt.Rectangle((0, 0), 1, 1, color=color_map["stable"], alpha=style.category_alpha, label="Stable"),
-            plt.Rectangle((0, 0), 1, 1, color=color_map["irregular"], alpha=style.category_alpha, label="Irregular"),
-            plt.Rectangle((0, 0), 1, 1, color=color_map["unstable"], alpha=style.category_alpha, label="Unstable"),
-            plt.Rectangle((0, 0), 1, 1, color=color_map["indeterminate"], alpha=style.category_alpha, label="Indeterminate"),
-        ])
     ax.legend(handles=handles, loc="upper left", frameon=True, framealpha=0.9)
 
     if show_category_strip:
