@@ -148,6 +148,35 @@ def _safe_read_xai_mask(path: Path, size: Tuple[int, int], mask_key: str = "mask
     return colored
 
 
+def _resolve_merged_masks_dir(xai_root: PathLike, video_name: str) -> Path:
+    """
+    Resolve MERGED_MASKS directory for a video from common XAI root layouts.
+
+    Supported inputs for xai_root include:
+    - <...>/XAI
+    - <...>/icopevid
+    - <...>/icopevid/XAI
+    - <...>/XAI/<video_name>/MERGED_MASKS
+    """
+    xai_root = Path(xai_root)
+    candidates = [
+        xai_root / video_name / "MERGED_MASKS",
+        xai_root / "XAI" / video_name / "MERGED_MASKS",
+        xai_root / "icopevid" / "XAI" / video_name / "MERGED_MASKS",
+        xai_root / "icopevid" / video_name / "MERGED_MASKS",
+    ]
+
+    if xai_root.name.upper() == "MERGED_MASKS":
+        candidates.insert(0, xai_root)
+
+    for cand in candidates:
+        if cand.exists():
+            return cand
+
+    # Return the canonical default path; callers can still handle missing files gracefully.
+    return candidates[0]
+
+
 def _blend_xai_overlay(frame: np.ndarray, mask: np.ndarray, xai_alpha: float) -> np.ndarray:
     alpha = np.clip(mask.max(axis=2, keepdims=True) * float(xai_alpha), 0.0, 1.0)
     overlay = frame * (1.0 - alpha) + mask * float(xai_alpha)
@@ -222,7 +251,7 @@ def load_video_strip(
     overlays = np.empty_like(frames)
     mesh_overlays = np.empty_like(frames) if include_mesh_regions else None
 
-    merged_dir = xai_root / video_dir.name / "MERGED_MASKS"
+    merged_dir = _resolve_merged_masks_dir(xai_root, video_dir.name)
 
     for out_idx, i in enumerate(indices):
         frame_path = img_files[i]
@@ -445,7 +474,7 @@ def extract_region_scores_video(
         cache_paths = {}
 
     img_files = _list_frames(video_dir, suffix)
-    merged_dir = xai_root / video_dir.name / "MERGED_MASKS"
+    merged_dir = _resolve_merged_masks_dir(xai_root, video_dir.name)
 
     indices = list(range(0, len(img_files), frame_step))
 
@@ -1277,6 +1306,284 @@ def plot_pain_sign(
     plt.close(fig)
 
 
+def _extract_overlay_row(strip_img: np.ndarray, out_size: Tuple[int, int]) -> np.ndarray:
+    """Extract only the XAI-overlay row from a strip returned by load_video_strip()."""
+    h = int(out_size[1])
+    if strip_img.ndim != 3:
+        raise ValueError(f"Expected strip image with 3 dims, got shape {strip_img.shape}")
+    if strip_img.shape[0] < (2 * h):
+        return strip_img
+    return strip_img[h:2 * h, :, :]
+
+
+def _extract_frame_row(strip_img: np.ndarray, out_size: Tuple[int, int]) -> np.ndarray:
+    """Extract only the original-frame row from a strip returned by load_video_strip()."""
+    h = int(out_size[1])
+    if strip_img.ndim != 3:
+        raise ValueError(f"Expected strip image with 3 dims, got shape {strip_img.shape}")
+    return strip_img[:h, :, :]
+
+
+def plot_multi_model_pain_sign(
+    *,
+    video_name: str,
+    model_results: Dict[str, Dict[str, Dict]],
+    path_icopevid_frames: PathLike,
+    xai_roots: Dict[str, PathLike],
+    save_path: PathLike,
+    mcdp: bool,
+    ma_window: int = 30,
+    duration_s: float = 20.0,
+    frame_step: int = 30,
+    out_size: Tuple[int, int] = (256, 256),
+    suffix: str = ".jpg",
+    xai_alpha: float = 0.6,
+    style: PlotStyle = PlotStyle(),
+    model_colors: Optional[Dict[str, str]] = None,
+) -> None:
+    """
+    Plot pain-sign curves from multiple models together, plus frames and XAI rows.
+
+    Layout:
+    - Top: all pain-sign curves in a single axis.
+    - Second row: original frames.
+    - Next rows: one merged XAI mask overlay row per model.
+    """
+    if not model_results:
+        raise ValueError("model_results is empty")
+
+    model_order = list(model_results.keys())
+    missing_xai = [m for m in model_order if m not in xai_roots]
+    if missing_xai:
+        raise KeyError(f"Missing xai_roots for model(s): {missing_xai}")
+
+    frames_root = Path(path_icopevid_frames)
+    video_dir = frames_root / video_name
+    if not video_dir.exists():
+        raise FileNotFoundError(f"Video directory not found: {video_dir}")
+
+    default_palette = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b"]
+    colors = {} if model_colors is None else dict(model_colors)
+
+    pain_sign_by_model: Dict[str, PainSignResult] = {}
+    overlay_by_model: Dict[str, np.ndarray] = {}
+    thresholds_by_model: Dict[str, PainSignThresholds] = {}
+    frames_row: Optional[np.ndarray] = None
+    models_without_overlay: List[str] = []
+
+    for idx, model_name in enumerate(model_order):
+        results_video = model_results[model_name]
+        if video_name not in results_video:
+            raise KeyError(f"Video '{video_name}' was not found in model '{model_name}' results")
+
+        if model_name not in colors:
+            colors[model_name] = default_palette[idx % len(default_palette)]
+
+        thresholds = get_thresholds_for_model(model_name)
+        thresholds_by_model[model_name] = thresholds
+        ps = compute_pain_sign(
+            results_video[video_name],
+            mcdp=mcdp,
+            theta_1=thresholds.theta_1,
+            ma_window=ma_window,
+            duration_s=duration_s,
+        )
+        pain_sign_by_model[model_name] = ps
+
+        xai_root = Path(xai_roots[model_name])
+        if not xai_root.exists():
+            raise FileNotFoundError(f"XAI root not found for model '{model_name}': {xai_root}")
+
+        strip_img = load_video_strip(
+            video_dir=video_dir,
+            model_name=model_name,
+            xai_root=xai_root,
+            frame_step=frame_step,
+            out_size=out_size,
+            suffix=suffix,
+            include_mesh_regions=False,
+            xai_alpha=xai_alpha,
+        )
+        if frames_row is None:
+            frames_row = _extract_frame_row(strip_img, out_size)
+        overlay_row = _extract_overlay_row(strip_img, out_size)
+        overlay_by_model[model_name] = overlay_row
+
+        if frames_row is not None and overlay_row.shape == frames_row.shape:
+            # If overlay is numerically identical to frames, masks were likely not found.
+            if float(np.mean(np.abs(overlay_row - frames_row))) <= 1e-7:
+                models_without_overlay.append(model_name)
+
+    if frames_row is None:
+        raise ValueError("Could not construct frames row for multi-model plot")
+
+    if len(models_without_overlay) == len(model_order):
+        raise FileNotFoundError(
+            "No XAI overlays were found for any model. "
+            f"Check xai_roots; expected MERGED_MASKS under each model/video. Models: {models_without_overlay}"
+        )
+    if models_without_overlay:
+        print(
+            "Warning: no XAI overlay detected for model(s) "
+            f"{models_without_overlay} in video '{video_name}'."
+        )
+
+    t_max = 0.0
+    for ps in pain_sign_by_model.values():
+        if ps.time_s.size:
+            t_max = max(t_max, float(ps.time_s.max()))
+    if t_max <= 0:
+        t_max = float(duration_s)
+
+    fig_h = max(7.2, 4.2 + 1.35 * (1 + len(model_order)))
+    fig = plt.figure(figsize=(17, fig_h))
+    gs = GridSpec(
+        nrows=2 + len(model_order),
+        ncols=1,
+        height_ratios=[3.2, 1.05] + [1.05] * len(model_order),
+        hspace=0.10,
+    )
+
+    ax = fig.add_subplot(gs[0])
+    true_label = infer_true_label(video_name)
+    label_txt = "Pain" if true_label == 1 else "No pain"
+    ax.set_title(f"{video_name} | True: {label_txt}", fontsize=style.title_size, pad=10)
+
+    for model_name in model_order:
+        ps = pain_sign_by_model[model_name]
+        pred_txt = "Pain" if ps.pred_label == 1 else "No pain"
+        theta_1 = thresholds_by_model[model_name].theta_1
+        line_label = f"{model_name}: mean p={ps.p_summary:.3f} ({pred_txt})"
+        ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=colors[model_name], label=line_label)
+        ax.axhline(theta_1, linestyle=":", lw=1.0, color=colors[model_name], alpha=0.28)
+
+    ax.set_xlim(0.0, t_max)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_ylabel("Pain probability", fontsize=style.label_size)
+    ax.tick_params(axis="both", labelsize=style.tick_size)
+    ax.tick_params(labelbottom=False)
+    ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
+    ax.grid(False, axis="x")
+    ax.legend(loc="upper left", frameon=True, fontsize=max(8, style.tick_size - 1))
+
+    ax_frames = fig.add_subplot(gs[1], sharex=ax)
+    ax_frames.imshow(frames_row, aspect="auto", extent=[0.0, t_max, 0.0, 1.0])
+    ax_frames.set_yticks([])
+    ax_frames.set_ylabel("Frames", fontsize=max(8, style.tick_size - 1))
+    ax_frames.tick_params(axis="x", labelsize=style.tick_size)
+    ax_frames.tick_params(labelbottom=False)
+    for spine in ax_frames.spines.values():
+        spine.set_visible(False)
+
+    last_row_idx = 1 + len(model_order)
+    for row_idx, model_name in enumerate(model_order, start=2):
+        ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
+        overlay_row = overlay_by_model[model_name]
+        ax_row.imshow(overlay_row, aspect="auto", extent=[0.0, t_max, 0.0, 1.0])
+        ax_row.set_yticks([])
+        ax_row.set_ylabel(f"{model_name} XAI", fontsize=max(8, style.tick_size - 1))
+        ax_row.tick_params(axis="x", labelsize=style.tick_size)
+        if row_idx < last_row_idx:
+            ax_row.tick_params(labelbottom=False)
+        else:
+            ax_row.set_xlabel("Time (s)", fontsize=style.label_size)
+        for spine in ax_row.spines.values():
+            spine.set_visible(False)
+
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def run_multi_model_pain_sign_report(
+    *,
+    model_results: Dict[str, Dict[str, Dict]],
+    path_icopevid_frames: PathLike,
+    xai_roots: Dict[str, PathLike],
+    out_dir: PathLike,
+    mcdp: bool,
+    ma_window: int = 30,
+    duration_s: float = 20.0,
+    frame_step: int = 30,
+    out_size: Tuple[int, int] = (256, 256),
+    suffix: str = ".jpg",
+    xai_alpha: float = 0.6,
+    style: PlotStyle = PlotStyle(),
+    model_colors: Optional[Dict[str, str]] = None,
+    video_names: Optional[Iterable[str]] = None,
+    strict: bool = False,
+) -> Dict[str, List[str]]:
+    """
+    Generate combined multi-model pain-sign plots for all videos.
+
+    By default, uses the intersection of video names present in every model in
+    `model_results`. Pass `video_names` to override this selection.
+    """
+    if not model_results:
+        raise ValueError("model_results is empty")
+
+    model_order = list(model_results.keys())
+    missing_xai = [m for m in model_order if m not in xai_roots]
+    if missing_xai:
+        raise KeyError(f"Missing xai_roots for model(s): {missing_xai}")
+
+    if video_names is None:
+        common_videos = set(model_results[model_order[0]].keys())
+        for model_name in model_order[1:]:
+            common_videos &= set(model_results[model_name].keys())
+        selected_videos = sorted(common_videos)
+        if not selected_videos:
+            raise ValueError("No common videos were found across all models in model_results")
+    else:
+        selected_videos = sorted({str(v) for v in video_names})
+        if not selected_videos:
+            raise ValueError("video_names was provided but is empty")
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    generated: List[str] = []
+    skipped: List[str] = []
+
+    for video_name in selected_videos:
+        missing_models = [m for m in model_order if video_name not in model_results[m]]
+        if missing_models:
+            msg = f"Video '{video_name}' is missing from model(s): {missing_models}"
+            if strict:
+                raise KeyError(msg)
+            print(f"Skipping {video_name}: {msg}")
+            skipped.append(video_name)
+            continue
+
+        save_path = out_dir / f"{video_name}_multi_model_painsign.jpg"
+        try:
+            plot_multi_model_pain_sign(
+                video_name=video_name,
+                model_results=model_results,
+                path_icopevid_frames=path_icopevid_frames,
+                xai_roots=xai_roots,
+                save_path=save_path,
+                mcdp=mcdp,
+                ma_window=ma_window,
+                duration_s=duration_s,
+                frame_step=frame_step,
+                out_size=out_size,
+                suffix=suffix,
+                xai_alpha=xai_alpha,
+                style=style,
+                model_colors=model_colors,
+            )
+            generated.append(video_name)
+        except Exception as exc:
+            if strict:
+                raise
+            print(f"Skipping {video_name}: {exc}")
+            skipped.append(video_name)
+
+    return {"generated": generated, "skipped": skipped}
+
+
 # ---------------------------------------------------------------------
 # End-to-end runner
 # ---------------------------------------------------------------------
@@ -1585,7 +1892,7 @@ def render_pain_sign_animation(
     else:
         iterator = list(enumerate(frame_indices))
 
-    merged_dir = xai_root / video_dir.name / "MERGED_MASKS"
+    merged_dir = _resolve_merged_masks_dir(xai_root, video_dir.name)
     fill_between = None
 
     cross_offsets = None
