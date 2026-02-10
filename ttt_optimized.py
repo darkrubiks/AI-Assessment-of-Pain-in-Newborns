@@ -11,6 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.cluster import KMeans
 from scipy.stats import entropy
 from scipy.signal import find_peaks
 from matplotlib.gridspec import GridSpec
@@ -1050,28 +1051,8 @@ def compute_pain_region_derivative_correlations(
         use_derivative=True,
     )
 
-
-# Visualization (doctor-facing)
-# ---------------------------------------------------------------------
-
-def _segments_from_mask(mask: np.ndarray) -> List[Tuple[int, int]]:
-    """Convert boolean mask into contiguous [start, end) index segments."""
-    if mask.size == 0:
-        return []
-    m = mask.astype(np.int8)
-    changes = np.diff(m, prepend=m[0])
-    starts = np.where(changes == 1)[0]
-    ends = np.where(changes == -1)[0]
-    if m[0] == 1:
-        starts = np.r_[0, starts]
-    if m[-1] == 1:
-        ends = np.r_[ends, len(m)]
-    return list(zip(starts, ends))
-
-
 def theta_crossings(p: np.ndarray, theta_1: float) -> np.ndarray:
     return np.where(np.diff((p >= theta_1).astype(int)) != 0)[0]
-
 
 def get_hist(signal):
     return np.histogram(signal, bins=np.linspace(0.0, 1.0, 11))
@@ -1083,6 +1064,142 @@ def get_probs(signal):
 def get_entropy(signal):
     pk = get_probs(signal)
     return entropy(pk, base=2)
+
+
+@dataclass(frozen=True)
+class SignKMeansModel:
+    """Per-model KMeans + semantic mapping for pain sign types."""
+    kmeans: KMeans
+    cluster_to_sign: Dict[int, str]
+
+
+def _pain_sign_entropy_crossings(ps: PainSignResult, theta_1: float) -> Tuple[float, float]:
+    if ps.p_hat.size == 0:
+        return float("nan"), float("nan")
+    entropy_val = float(get_entropy(ps.p_hat))
+    crossings = float(theta_crossings(ps.p_hat, theta_1).size)
+    return entropy_val, crossings
+
+
+def _derive_cluster_to_sign_mapping(kmeans: KMeans) -> Dict[int, str]:
+    """
+    Build semantic labels from centroids so mapping is stable across models.
+
+    Features are [entropy, crossings], as in notebook Analysis.
+    """
+    centers = np.asarray(kmeans.cluster_centers_, dtype=float)
+    if centers.shape != (3, 2):
+        return {0: "stable", 1: "unstable", 2: "irregular"}
+
+    entropy_centers = centers[:, 0]
+    crossing_centers = centers[:, 1]
+
+    # Highest crossings centroid corresponds to unstable dynamics.
+    unstable_idx = int(np.argmax(crossing_centers))
+    remaining = [idx for idx in range(3) if idx != unstable_idx]
+
+    # Of the remaining low-crossing clusters, lower entropy is stable.
+    rem_entropy = entropy_centers[remaining]
+    stable_idx = int(remaining[int(np.argmin(rem_entropy))])
+    irregular_idx = int(remaining[1] if remaining[0] == stable_idx else remaining[0])
+
+    return {
+        stable_idx: "stable",
+        irregular_idx: "irregular",
+        unstable_idx: "unstable",
+    }
+
+
+def _fit_notebook_sign_kmeans(
+    results_video: Dict[str, Dict],
+    *,
+    mcdp: bool,
+    theta_1: float,
+    ma_window: int,
+    duration_s: float,
+) -> Optional[SignKMeansModel]:
+    """Fit the same KMeans setup used in 7_icopevid.ipynb Analysis."""
+    rows: List[List[float]] = []
+    for video_data in results_video.values():
+        try:
+            ps = compute_pain_sign(
+                video_data,
+                mcdp=mcdp,
+                theta_1=theta_1,
+                ma_window=ma_window,
+                duration_s=duration_s,
+            )
+        except Exception:
+            continue
+
+        entropy_val, crossings = _pain_sign_entropy_crossings(ps, theta_1)
+        if np.isfinite(entropy_val) and np.isfinite(crossings):
+            rows.append([entropy_val, crossings])
+
+    if len(rows) < 3:
+        return None
+
+    x = np.asarray(rows, dtype=float)
+    if np.unique(x, axis=0).shape[0] < 3:
+        return None
+
+    kmeans = KMeans(n_clusters=3, random_state=0, n_init="auto")
+    try:
+        kmeans.fit(x)
+    except Exception:
+        return None
+    return SignKMeansModel(
+        kmeans=kmeans,
+        cluster_to_sign=_derive_cluster_to_sign_mapping(kmeans),
+    )
+
+
+def _is_signal_consistently_near_theta_1(
+    p_hat: np.ndarray,
+    *,
+    theta_1: float,
+    tolerance: float = 0.05,
+    min_ratio: float = 0.60,
+) -> bool:
+    if p_hat.size == 0:
+        return False
+    near = np.abs(np.asarray(p_hat, dtype=float) - float(theta_1)) <= float(tolerance)
+    return bool(np.mean(near) >= float(min_ratio))
+
+
+def classify_pain_sign_type(
+    ps: PainSignResult,
+    *,
+    theta_1: float,
+    theta_3: float,
+    sign_kmeans_model: Optional[SignKMeansModel],
+    near_theta_tolerance: float = 0.05,
+    near_theta_ratio: float = 0.60,
+) -> str:
+    """Return stable/irregular/unstable/indeterminate for one pain-sign curve."""
+    sigma_is_uncertain = (
+        ps.sigma_summary is not None
+        and np.isfinite(ps.sigma_summary)
+        and float(ps.sigma_summary) > float(theta_3)
+    )
+    if sigma_is_uncertain:
+        return "indeterminate"
+
+    if _is_signal_consistently_near_theta_1(
+        ps.p_hat,
+        theta_1=theta_1,
+        tolerance=near_theta_tolerance,
+        min_ratio=near_theta_ratio,
+    ):
+        return "indeterminate"
+
+    entropy_val, crossings = _pain_sign_entropy_crossings(ps, theta_1)
+    if sign_kmeans_model is None or not np.isfinite(entropy_val) or not np.isfinite(crossings):
+        return "indeterminate"
+
+    cluster_id = int(sign_kmeans_model.kmeans.predict(np.asarray([[entropy_val, crossings]], dtype=float))[0])
+    return sign_kmeans_model.cluster_to_sign.get(cluster_id, "indeterminate")
+
 
 def infer_true_label(name_for_label: str) -> int:
     name = str(name_for_label).lower()
@@ -1545,6 +1662,7 @@ def plot_multi_model_pain_sign(
     xai_alpha: float = 0.6,
     style: PlotStyle = PlotStyle(),
     model_colors: Optional[Dict[str, str]] = None,
+    sign_kmeans_by_model: Optional[Dict[str, Optional[SignKMeansModel]]] = None,
 ) -> None:
     """
     Plot pain-sign curves from multiple models together, plus frames and XAI rows.
@@ -1662,7 +1780,15 @@ def plot_multi_model_pain_sign(
         theta_1 = thresholds_by_model[model_name].theta_1
         theta_3 = thresholds_by_model[model_name].theta_3
         idx_cross = theta_crossings(ps.p_hat, theta_1)
-        entropy_val = float(get_entropy(ps.p_hat)) if ps.p_hat.size else float("nan")
+        sign_kmeans_model = None
+        if sign_kmeans_by_model is not None:
+            sign_kmeans_model = sign_kmeans_by_model.get(model_name)
+        sign_type = classify_pain_sign_type(
+            ps,
+            theta_1=theta_1,
+            theta_3=theta_3,
+            sign_kmeans_model=sign_kmeans_model,
+        )
         if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
             sigma_txt = "n/a"
             unc_state = "n/a"
@@ -1671,7 +1797,7 @@ def plot_multi_model_pain_sign(
             unc_state = "Certain" if float(ps.sigma_summary) <= float(theta_3) else "Uncertain"
         line_label = (
             f"{display_name} / $\\hat{{p}}$ = {ps.p_summary:.2f} -> {pred_txt} / "
-            f"Entropy = {entropy_val:.2f} / Crossings = {int(idx_cross.size)} / "
+            f"Sign Type = {sign_type} / "
             f"Mean $\\hat{{\\sigma}}$ = {sigma_txt} -> {unc_state}"
         )
         ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=colors[model_name], label=line_label)
@@ -1789,6 +1915,25 @@ def run_multi_model_pain_sign_report(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    sign_kmeans_by_model: Dict[str, Optional[SignKMeansModel]] = {}
+    for model_name in model_order:
+        thresholds = get_thresholds_for_model(model_name)
+        sign_model = _fit_notebook_sign_kmeans(
+            model_results[model_name],
+            mcdp=mcdp,
+            theta_1=thresholds.theta_1,
+            ma_window=ma_window,
+            duration_s=duration_s,
+        )
+        sign_kmeans_by_model[model_name] = sign_model
+        if sign_model is None:
+            print(
+                f"Warning: could not fit KMeans sign-typing for model '{model_name}'. "
+                "Sign type will default to indeterminate."
+            )
+        else:
+            print(f"Sign-type KMeans mapping for '{model_name}': {sign_model.cluster_to_sign}")
+
     generated: List[str] = []
     skipped: List[str] = []
 
@@ -1819,6 +1964,7 @@ def run_multi_model_pain_sign_report(
                 xai_alpha=xai_alpha,
                 style=style,
                 model_colors=model_colors,
+                sign_kmeans_by_model=sign_kmeans_by_model,
             )
             generated.append(video_name)
         except Exception as exc:
