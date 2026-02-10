@@ -1660,11 +1660,19 @@ def plot_multi_model_pain_sign(
         display_name = _format_model_name_for_plot(model_name)
         pred_txt = "Pain" if ps.pred_label == 1 else "No Pain"
         theta_1 = thresholds_by_model[model_name].theta_1
+        theta_3 = thresholds_by_model[model_name].theta_3
         idx_cross = theta_crossings(ps.p_hat, theta_1)
         entropy_val = float(get_entropy(ps.p_hat)) if ps.p_hat.size else float("nan")
+        if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
+            sigma_txt = "n/a"
+            unc_state = "n/a"
+        else:
+            sigma_txt = f"{ps.sigma_summary:.2f}"
+            unc_state = "Certain" if float(ps.sigma_summary) <= float(theta_3) else "Uncertain"
         line_label = (
             f"{display_name} / $\\hat{{p}}$ = {ps.p_summary:.2f} -> {pred_txt} / "
-            f"Entropy = {entropy_val:.2f} / Crossings = {int(idx_cross.size)}"
+            f"Entropy = {entropy_val:.2f} / Crossings = {int(idx_cross.size)} / "
+            f"Mean $\\hat{{\\sigma}}$ = {sigma_txt} -> {unc_state}"
         )
         ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=colors[model_name], label=line_label)
         ax.axhline(theta_1, linestyle="--", lw=1.0, color=colors[model_name], alpha=0.35)
