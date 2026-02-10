@@ -518,7 +518,7 @@ def extract_region_scores_video(
 
     rows = []
     rows_append = rows.append
-    for i in tqdm(indices, desc=f"Frames {video_dir.name}"):
+    for i in tqdm(indices, desc=f"Quadros {video_dir.name}"):
         rows_append(_process_frame(i))
 
     df = pd.DataFrame(rows)
@@ -945,7 +945,7 @@ def compute_pain_region_correlations(
                 mask_key=mask_key,
             )
         except Exception as exc:
-            print(f"Region curves skipped for {video_name}: {exc}")
+            print(f"Curvas de regiao ignoradas para {video_name}: {exc}")
             region_df = None
 
         region_scores: Dict[str, float] = {}
@@ -1154,6 +1154,54 @@ def _fit_notebook_sign_kmeans(
     )
 
 
+def _fit_notebook_sign_kmeans_all_models(
+    model_results: Dict[str, Dict[str, Dict]],
+    *,
+    mcdp: bool,
+    ma_window: int,
+    duration_s: float,
+) -> Optional[SignKMeansModel]:
+    """Fit one pooled KMeans over all models to enforce consistent sign typing."""
+    rows: List[List[float]] = []
+
+    for model_name, results_video in model_results.items():
+        thresholds = get_thresholds_for_model(model_name)
+        theta_1 = thresholds.theta_1
+
+        for video_data in results_video.values():
+            try:
+                ps = compute_pain_sign(
+                    video_data,
+                    mcdp=mcdp,
+                    theta_1=theta_1,
+                    ma_window=ma_window,
+                    duration_s=duration_s,
+                )
+            except Exception:
+                continue
+
+            entropy_val, crossings = _pain_sign_entropy_crossings(ps, theta_1)
+            if np.isfinite(entropy_val) and np.isfinite(crossings):
+                rows.append([entropy_val, crossings])
+
+    if len(rows) < 3:
+        return None
+
+    x = np.asarray(rows, dtype=float)
+    if np.unique(x, axis=0).shape[0] < 3:
+        return None
+
+    kmeans = KMeans(n_clusters=3, random_state=0, n_init="auto")
+    try:
+        kmeans.fit(x)
+    except Exception:
+        return None
+    return SignKMeansModel(
+        kmeans=kmeans,
+        cluster_to_sign=_derive_cluster_to_sign_mapping(kmeans),
+    )
+
+
 def _is_signal_consistently_near_theta_1(
     p_hat: np.ndarray,
     *,
@@ -1199,6 +1247,16 @@ def classify_pain_sign_type(
 
     cluster_id = int(sign_kmeans_model.kmeans.predict(np.asarray([[entropy_val, crossings]], dtype=float))[0])
     return sign_kmeans_model.cluster_to_sign.get(cluster_id, "indeterminate")
+
+
+def _sign_type_to_ptbr(sign_type: str) -> str:
+    mapping = {
+        "stable": "Estável",
+        "irregular": "Irregular",
+        "indeterminate": "Indeterminado",
+        "unstable": "Instável",
+    }
+    return mapping.get(str(sign_type).lower(), str(sign_type))
 
 
 def infer_true_label(name_for_label: str) -> int:
@@ -1248,8 +1306,8 @@ def _format_prob_axis(ax, time: np.ndarray, style: PlotStyle, has_regions: bool)
     if time.size:
         ax.set_xlim(time.min(), time.max())
     ax.set_ylim(-0.02, 1.02)
-    ax.set_ylabel("Pain probability", fontsize=style.label_size)
-    ax.set_xlabel("Time (s)", fontsize=style.label_size)
+    ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
+    ax.set_xlabel("Tempo (s)", fontsize=style.label_size)
     if has_regions:
         ax.set_xlabel("")
         ax.tick_params(labelbottom=False)
@@ -1264,11 +1322,11 @@ def _build_reliability_parts(
     pred_txt: str,
     idx_cross: np.ndarray,
 ) -> List[str]:
-    parts = [f"Mean p={ps.p_summary:.3f} -> {pred_txt}"]
+    parts = [f"Média p={ps.p_summary:.3f} -> {pred_txt}"]
     if ps.sigma_summary is not None:
-        state = "Certain" if ps.sigma_summary <= thresholds.theta_3 else "Uncertain"
-        parts.append(f"Mean sigma={ps.sigma_summary:.3f} -> {state}")
-    parts.append(f"Crossings={int(idx_cross.size)}")
+        state = "Confiável" if ps.sigma_summary <= thresholds.theta_3 else "Incerto"
+        parts.append(f"Média sigma={ps.sigma_summary:.3f} -> {state}")
+    parts.append(f"Cruzamentos={int(idx_cross.size)}")
     return parts
 
 
@@ -1297,9 +1355,9 @@ def _format_metrics_summary(metrics: Dict[str, float], *, hysteresis: float) -> 
     switch_rate = _fmt_rate(metrics.get("switching_rate_hz", float("nan")))
 
     lines = [
-        f"Pain time={pain_time}s | No-pain time={no_pain_time}s",
-        f"Indeterminate (±{hysteresis:.2f})={indeterminate_time}s | Uncertainty={uncertainty_time}s",
-        f"False alarm={false_alarm_time}s | Switches={switch_count} ({switch_rate} Hz)",
+        f"Tempo de dor={pain_time}s | Tempo sem dor={no_pain_time}s",
+        f"Indeterminado (+/-{hysteresis:.2f})={indeterminate_time}s | Incerteza={uncertainty_time}s",
+        f"Falso alarme={false_alarm_time}s | Trocas={switch_count} ({switch_rate} Hz)",
     ]
     return "\n".join(lines)
 
@@ -1326,9 +1384,9 @@ def _add_metrics_summary_box(ax, text: str, style: PlotStyle) -> None:
 
 
 def _label_strip_rows(ax, rows: int, style: PlotStyle) -> None:
-    row_labels = ["Frames", "Frames + XAI"]
+    row_labels = ["Quadros", "Quadros + XAI"]
     if rows == 3:
-        row_labels.append("Mesh regions")
+        row_labels.append("Regioes da malha")
     for idx, label in enumerate(row_labels):
         y = (rows - idx - 0.5) / rows
         ax.text(-0.01, y, label, transform=ax.transAxes, rotation=90, va="center", ha="right", fontsize=style.label_size)
@@ -1341,7 +1399,7 @@ def plot_region_importance_stack(
     smooth_window=0,
     top_k=None,
     other_label="other",
-    title="Region importance (normalized, stacked)",
+    title="Importância das regiões (normalizada, empilhada)",
     ax=None,
     colors=None,
     show=True,
@@ -1419,8 +1477,8 @@ def plot_region_importance_stack(
     ax.set_ylim(0, 1)
     if t.size:
         ax.set_xlim(t.min(), t.max())
-    ax.set_ylabel("Relative importance")
-    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Importância relativa")
+    ax.set_xlabel("Tempo (s)")
     if title:
         ax.set_title(title)
     if legend:
@@ -1501,16 +1559,16 @@ def plot_pain_sign(
 
     idx_cross = theta_crossings(p, thresholds.theta_1)
     if idx_cross.size:
-        ax.scatter(time[idx_cross], np.full(idx_cross.shape, thresholds.theta_1), s=40, color=style.uncertain_color, zorder=5, label="Decision crossings")
+        ax.scatter(time[idx_cross], np.full(idx_cross.shape, thresholds.theta_1), s=40, color=style.uncertain_color, zorder=5, label="Cruzamentos de decisao")
 
     _format_prob_axis(ax, time, style, has_regions=True)
 
-    label_txt = "Pain" if true_label == 1 else "No pain"
-    pred_txt = "Pain" if ps.pred_label == 1 else "No pain"
+    label_txt = "Dor" if true_label == 1 else "Sem dor"
+    pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
     reliability_parts = _build_reliability_parts(ps, thresholds, pred_txt, idx_cross)
 
     ax.set_title(
-        f"{video_name} | Model: {model_name} | True: {label_txt} | " + " | ".join(reliability_parts),
+        f"{video_name} | Modelo: {model_name} | Real: {label_txt} | " + " | ".join(reliability_parts),
         fontsize=style.title_size,
         pad=10,
     )
@@ -1519,7 +1577,7 @@ def plot_pain_sign(
     _add_metrics_summary_box(ax, metrics_text, style)
 
     handles = [
-        plt.Line2D([0], [0], color=style.signal_color, lw=2.4, label="Pain probability"),
+        plt.Line2D([0], [0], color=style.signal_color, lw=2.4, label="Probabilidade de dor"),
     ]
     ax.legend(handles=handles, loc="upper left", frameon=True, framealpha=0.9)
 
@@ -1595,8 +1653,8 @@ def plot_pain_sign(
             show=False,
             legend_kwargs={"fontsize": 9},
         )
-        axr.set_ylabel("Relative importance", fontsize=style.label_size)
-        axr.set_xlabel("Time (s)", fontsize=style.label_size)
+        axr.set_ylabel("Importância relativa", fontsize=style.label_size)
+        axr.set_xlabel("Tempo (s)", fontsize=style.label_size)
         axr.tick_params(axis="both", labelsize=style.tick_size)
         axr.grid(True, axis="y", alpha=0.18, color=style.grid_color)
         axr.set_ylim(0, 1)
@@ -1673,17 +1731,17 @@ def plot_multi_model_pain_sign(
     - Next rows: one merged XAI mask overlay row per model.
     """
     if not model_results:
-        raise ValueError("model_results is empty")
+        raise ValueError("model_results esta vazio")
 
     model_order = list(model_results.keys())
     missing_xai = [m for m in model_order if m not in xai_roots]
     if missing_xai:
-        raise KeyError(f"Missing xai_roots for model(s): {missing_xai}")
+        raise KeyError(f"xai_roots ausente(s) para modelo(s): {missing_xai}")
 
     frames_root = Path(path_icopevid_frames)
     video_dir = frames_root / video_name
     if not video_dir.exists():
-        raise FileNotFoundError(f"Video directory not found: {video_dir}")
+        raise FileNotFoundError(f"Diretorio de video nao encontrado: {video_dir}")
 
     default_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#17becf"]
     colors = {} if model_colors is None else dict(model_colors)
@@ -1697,7 +1755,7 @@ def plot_multi_model_pain_sign(
     for idx, model_name in enumerate(model_order):
         results_video = model_results[model_name]
         if video_name not in results_video:
-            raise KeyError(f"Video '{video_name}' was not found in model '{model_name}' results")
+            raise KeyError(f"Video '{video_name}' nao foi encontrado nos resultados do modelo '{model_name}'")
 
         if model_name not in colors:
             colors[model_name] = default_palette[idx % len(default_palette)]
@@ -1715,7 +1773,7 @@ def plot_multi_model_pain_sign(
 
         xai_root = Path(xai_roots[model_name])
         if not xai_root.exists():
-            raise FileNotFoundError(f"XAI root not found for model '{model_name}': {xai_root}")
+            raise FileNotFoundError(f"Raiz XAI nao encontrada para o modelo '{model_name}': {xai_root}")
 
         strip_img = load_video_strip(
             video_dir=video_dir,
@@ -1738,17 +1796,17 @@ def plot_multi_model_pain_sign(
                 models_without_overlay.append(model_name)
 
     if frames_row is None:
-        raise ValueError("Could not construct frames row for multi-model plot")
+        raise ValueError("Nao foi possivel montar a linha de quadros para o grafico multi-modelo")
 
     if len(models_without_overlay) == len(model_order):
         raise FileNotFoundError(
-            "No XAI overlays were found for any model. "
-            f"Check xai_roots; expected MERGED_MASKS under each model/video. Models: {models_without_overlay}"
+            "Nenhum overlay XAI foi encontrado para qualquer modelo. "
+            f"Verifique xai_roots; esperado MERGED_MASKS em cada modelo/video. Modelos: {models_without_overlay}"
         )
     if models_without_overlay:
         print(
-            "Warning: no XAI overlay detected for model(s) "
-            f"{models_without_overlay} in video '{video_name}'."
+            "Aviso: nenhum overlay XAI detectado para o(s) modelo(s) "
+            f"{models_without_overlay} no video '{video_name}'."
         )
 
     t_max = 0.0
@@ -1769,14 +1827,14 @@ def plot_multi_model_pain_sign(
 
     ax = fig.add_subplot(gs[0])
     true_label = infer_true_label(video_name)
-    label_txt = "Pain" if true_label == 1 else "No Pain"
-    ax.set_title(f"Ground-Truth Label = {label_txt}", fontsize=style.title_size, y=1.07)
+    label_txt = "Dor" if true_label == 1 else "Sem dor"
+    ax.set_title(f"Classe real = {label_txt}", fontsize=style.title_size, y=1.07)
 
 
     for model_name in model_order:
         ps = pain_sign_by_model[model_name]
         display_name = _format_model_name_for_plot(model_name)
-        pred_txt = "Pain" if ps.pred_label == 1 else "No Pain"
+        pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
         theta_1 = thresholds_by_model[model_name].theta_1
         theta_3 = thresholds_by_model[model_name].theta_3
         idx_cross = theta_crossings(ps.p_hat, theta_1)
@@ -1789,16 +1847,17 @@ def plot_multi_model_pain_sign(
             theta_3=theta_3,
             sign_kmeans_model=sign_kmeans_model,
         )
+        sign_type_ptbr = _sign_type_to_ptbr(sign_type)
         if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
             sigma_txt = "n/a"
             unc_state = "n/a"
         else:
             sigma_txt = f"{ps.sigma_summary:.2f}"
-            unc_state = "Certain" if float(ps.sigma_summary) <= float(theta_3) else "Uncertain"
+            unc_state = "Confiável" if float(ps.sigma_summary) <= float(theta_3) else "Incerto"
         line_label = (
             f"{display_name} / $\\hat{{p}}$ = {ps.p_summary:.2f} -> {pred_txt} / "
-            f"Sign Type = {sign_type} / "
-            f"Mean $\\hat{{\\sigma}}$ = {sigma_txt} -> {unc_state}"
+            f"Tipo de sinal = {sign_type_ptbr} / "
+            f"Média $\\hat{{\\sigma}}$ = {sigma_txt} -> {unc_state}"
         )
         ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=colors[model_name], label=line_label)
         ax.axhline(theta_1, linestyle="--", lw=1.0, color=colors[model_name], alpha=0.35)
@@ -1817,7 +1876,7 @@ def plot_multi_model_pain_sign(
 
     ax.set_xlim(0.0, t_max)
     ax.set_ylim(-0.02, 1.02)
-    ax.set_ylabel("Pain Probability", fontsize=style.label_size)
+    ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
     ax.tick_params(axis="both", labelsize=style.tick_size)
     ax.tick_params(labelbottom=False)
     ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
@@ -1837,7 +1896,7 @@ def plot_multi_model_pain_sign(
         extent=[0.0, t_max, 0.0, 1.0],
     )
     ax_frames.set_yticks([])
-    ax_frames.set_ylabel("Frames", fontsize=max(8, style.tick_size - 1))
+    ax_frames.set_ylabel("Quadros", fontsize=max(8, style.tick_size - 1))
     ax_frames.tick_params(axis="x", labelsize=style.tick_size)
     ax_frames.tick_params(labelbottom=False)
     for spine in ax_frames.spines.values():
@@ -1858,7 +1917,7 @@ def plot_multi_model_pain_sign(
         if row_idx < last_row_idx:
             ax_row.tick_params(labelbottom=False)
         else:
-            ax_row.set_xlabel("Time [s]", fontsize=style.label_size)
+            ax_row.set_xlabel("Tempo [s]", fontsize=style.label_size)
         for spine in ax_row.spines.values():
             spine.set_visible(False)
 
@@ -1893,12 +1952,12 @@ def run_multi_model_pain_sign_report(
     `model_results`. Pass `video_names` to override this selection.
     """
     if not model_results:
-        raise ValueError("model_results is empty")
+        raise ValueError("model_results esta vazio")
 
     model_order = list(model_results.keys())
     missing_xai = [m for m in model_order if m not in xai_roots]
     if missing_xai:
-        raise KeyError(f"Missing xai_roots for model(s): {missing_xai}")
+        raise KeyError(f"xai_roots ausente(s) para modelo(s): {missing_xai}")
 
     if video_names is None:
         common_videos = set(model_results[model_order[0]].keys())
@@ -1906,33 +1965,32 @@ def run_multi_model_pain_sign_report(
             common_videos &= set(model_results[model_name].keys())
         selected_videos = sorted(common_videos)
         if not selected_videos:
-            raise ValueError("No common videos were found across all models in model_results")
+            raise ValueError("Nenhum video em comum foi encontrado entre todos os modelos em model_results")
     else:
         selected_videos = sorted({str(v) for v in video_names})
         if not selected_videos:
-            raise ValueError("video_names was provided but is empty")
+            raise ValueError("video_names foi fornecido, mas esta vazio")
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    sign_kmeans_by_model: Dict[str, Optional[SignKMeansModel]] = {}
-    for model_name in model_order:
-        thresholds = get_thresholds_for_model(model_name)
-        sign_model = _fit_notebook_sign_kmeans(
-            model_results[model_name],
-            mcdp=mcdp,
-            theta_1=thresholds.theta_1,
-            ma_window=ma_window,
-            duration_s=duration_s,
+    global_sign_model = _fit_notebook_sign_kmeans_all_models(
+        model_results,
+        mcdp=mcdp,
+        ma_window=ma_window,
+        duration_s=duration_s,
+    )
+    if global_sign_model is None:
+        print(
+            "Aviso: nao foi possivel ajustar o KMeans global de tipo de sinal para todos os modelos. "
+            "O tipo de sinal sera definido como indeterminado."
         )
-        sign_kmeans_by_model[model_name] = sign_model
-        if sign_model is None:
-            print(
-                f"Warning: could not fit KMeans sign-typing for model '{model_name}'. "
-                "Sign type will default to indeterminate."
-            )
-        else:
-            print(f"Sign-type KMeans mapping for '{model_name}': {sign_model.cluster_to_sign}")
+    else:
+        print(f"Mapeamento global KMeans de tipo de sinal (todos os modelos): {global_sign_model.cluster_to_sign}")
+
+    sign_kmeans_by_model: Dict[str, Optional[SignKMeansModel]] = {
+        model_name: global_sign_model for model_name in model_order
+    }
 
     generated: List[str] = []
     skipped: List[str] = []
@@ -1940,14 +1998,14 @@ def run_multi_model_pain_sign_report(
     for video_name in selected_videos:
         missing_models = [m for m in model_order if video_name not in model_results[m]]
         if missing_models:
-            msg = f"Video '{video_name}' is missing from model(s): {missing_models}"
+            msg = f"Video '{video_name}' ausente no(s) modelo(s): {missing_models}"
             if strict:
                 raise KeyError(msg)
-            print(f"Skipping {video_name}: {msg}")
+            print(f"Ignorando {video_name}: {msg}")
             skipped.append(video_name)
             continue
 
-        save_path = out_dir / f"{video_name}_multi_model_painsign.jpg"
+        save_path = out_dir / f"{video_name}_multi_model_painsign.pdf"
         try:
             plot_multi_model_pain_sign(
                 video_name=video_name,
@@ -1970,7 +2028,7 @@ def run_multi_model_pain_sign_report(
         except Exception as exc:
             if strict:
                 raise
-            print(f"Skipping {video_name}: {exc}")
+            print(f"Ignorando {video_name}: {exc}")
             skipped.append(video_name)
 
     return {"generated": generated, "skipped": skipped}
@@ -2048,10 +2106,10 @@ def run_pain_sign_report(
                     duration_s=duration_s,
                 )
             except Exception as exc:
-                print(f"Region curves skipped for {video_name}: {exc}")
+                print(f"Curvas de regiao ignoradas para {video_name}: {exc}")
                 region_df = None
 
-        save_path = out_dir / f"{video_name}_{model_name}.jpg" #CHANGE TO PDF HERE
+        save_path = out_dir / f"{video_name}_{model_name}.pdf"
         plot_pain_sign(
             video_name=video_name,
             strip_img=strip,
@@ -2162,7 +2220,7 @@ def render_pain_sign_animation(
                 mask_key=mask_key,
             )
         except Exception as exc:
-            print(f"Region curves skipped for {video_name}: {exc}")
+            print(f"Curvas de regiao ignoradas para {video_name}: {exc}")
             region_df = None
 
     region_curves = _prepare_region_curves(
@@ -2208,22 +2266,22 @@ def render_pain_sign_animation(
 
     _format_prob_axis(ax, time, style, has_regions)
 
-    label_txt = "Pain" if true_label == 1 else "No pain"
-    pred_txt = "Pain" if ps.pred_label == 1 else "No pain"
+    label_txt = "Dor" if true_label == 1 else "Sem dor"
+    pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
     reliability_parts = _build_reliability_parts(ps, thresholds, pred_txt, idx_cross)
 
     ax.set_title(
-        f"{video_name} | Model: {model_name} | True: {label_txt} | " + " | ".join(reliability_parts),
+        f"{video_name} | Modelo: {model_name} | Real: {label_txt} | " + " | ".join(reliability_parts),
         fontsize=style.title_size,
         pad=10,
     )
 
     handles = [
-        plt.Line2D([0], [0], color=style.certain_color, lw=2.2, label="Probability (certain)"),
-        plt.Line2D([0], [0], color=style.uncertain_color, lw=2.6, label="Probability (uncertain)"),
+        plt.Line2D([0], [0], color=style.certain_color, lw=2.2, label="Probabilidade (confiável)"),
+        plt.Line2D([0], [0], color=style.uncertain_color, lw=2.6, label="Probabilidade (incerta)"),
     ]
     if sigma is not None:
-        handles.append(plt.Rectangle((0, 0), 1, 1, color=style.ci_color, alpha=style.ci_alpha, label="+/- sigma band"))
+        handles.append(plt.Rectangle((0, 0), 1, 1, color=style.ci_color, alpha=style.ci_alpha, label="Faixa +/- sigma"))
     ax.legend(handles=handles, loc="upper left", frameon=True, framealpha=0.9)
 
     # Region curves
@@ -2243,8 +2301,8 @@ def render_pain_sign_animation(
             show=False,
             legend_kwargs={"fontsize": 9},
         )
-        axr.set_ylabel("Relative importance", fontsize=style.label_size)
-        axr.set_xlabel("Time (s)", fontsize=style.label_size)
+        axr.set_ylabel("Importância relativa", fontsize=style.label_size)
+        axr.set_xlabel("Tempo (s)", fontsize=style.label_size)
         axr.tick_params(axis="both", labelsize=style.tick_size)
         axr.grid(True, axis="y", alpha=0.18, color=style.grid_color)
         axr.set_ylim(0, 1)
@@ -2280,7 +2338,7 @@ def render_pain_sign_animation(
     curve_indices = np.searchsorted(time, frame_indices / float(fps), side="right") if time.size else np.zeros_like(frame_indices)
 
     if show_progress:
-        iterator = tqdm(list(enumerate(frame_indices)), desc=f"Animating {video_name}")
+        iterator = tqdm(list(enumerate(frame_indices)), desc=f"Animando {video_name}")
     else:
         iterator = list(enumerate(frame_indices))
 
