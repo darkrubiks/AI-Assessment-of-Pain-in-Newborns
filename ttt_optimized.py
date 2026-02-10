@@ -825,6 +825,44 @@ def _interp_to_time(source_time: np.ndarray, source_values: np.ndarray, target_t
     return np.interp(target_time, source_time, source_values)
 
 
+def _ensure_strictly_increasing_time(time_s: np.ndarray) -> np.ndarray:
+    """Return a finite, strictly increasing copy of time_s for stable derivatives."""
+    t = np.asarray(time_s, dtype=float).reshape(-1).copy()
+    if t.size == 0:
+        return t
+    if np.any(~np.isfinite(t)):
+        return np.arange(t.size, dtype=float)
+
+    eps = 1e-6
+    for i in range(1, t.size):
+        if t[i] <= t[i - 1]:
+            t[i] = t[i - 1] + eps
+    return t
+
+
+def compute_time_derivative(time_s: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """
+    Compute robust temporal derivative d(values)/dt.
+    Falls back to zeros for empty/degenerate inputs.
+    """
+    t = np.asarray(time_s, dtype=float).reshape(-1)
+    x = np.asarray(values, dtype=float).reshape(-1)
+    if t.size == 0 or x.size == 0:
+        return np.array([], dtype=float)
+
+    n = min(t.size, x.size)
+    t = _ensure_strictly_increasing_time(t[:n])
+    x = interp_curve(x[:n])
+    if n == 1:
+        return np.zeros(1, dtype=float)
+
+    edge_order = 2 if n >= 3 else 1
+    deriv = np.gradient(x, t, edge_order=edge_order)
+    deriv = np.asarray(deriv, dtype=float)
+    deriv = np.nan_to_num(deriv, nan=0.0, posinf=0.0, neginf=0.0)
+    return deriv
+
+
 def _safe_corr(x: np.ndarray, y: np.ndarray, *, method: str = "pearson", min_samples: int = 5) -> float:
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -851,6 +889,14 @@ def _safe_corr(x: np.ndarray, y: np.ndarray, *, method: str = "pearson", min_sam
     return float(np.corrcoef(x_m, y_m)[0, 1])
 
 
+def _summarize_corr_table(corr_df: pd.DataFrame) -> pd.DataFrame:
+    return pd.DataFrame({
+        "mean": corr_df.mean(axis=0, skipna=True),
+        "std": corr_df.std(axis=0, ddof=1, skipna=True),
+        "n": corr_df.count(axis=0),
+    })
+
+
 def compute_pain_region_correlations(
     results_video: Dict[str, Dict],
     *,
@@ -865,8 +911,13 @@ def compute_pain_region_correlations(
     mask_key: str = "mask_raw",
     method: str = "pearson",
     min_samples: int = 5,
+    use_derivative: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Compute per-video correlation between pain sign and XAI region curves."""
+    """
+    Compute per-video correlation between pain sign and XAI region curves.
+
+    If use_derivative=True, computes corr(dP/dt, dRegion/dt) instead of corr(P, Region).
+    """
     thresholds = get_thresholds_for_model(model_name)
     frames_root = Path(path_icopevid_frames)
     xai_root = Path(xai_root)
@@ -900,6 +951,8 @@ def compute_pain_region_correlations(
         if region_df is not None and not region_df.empty:
             region_cols = [c for c in region_df.columns if c not in ("frame", "frame_idx", "time_s")]
             if region_cols:
+                pain_series = compute_time_derivative(ps.time_s, ps.p_hat) if use_derivative else ps.p_hat
+
                 if "time_s" in region_df.columns:
                     r_time = region_df["time_s"].to_numpy(dtype=float)
                 elif "frame_idx" in region_df.columns:
@@ -914,7 +967,8 @@ def compute_pain_region_correlations(
                 for idx, region in enumerate(region_cols):
                     series = interp_curve(region_values[:, idx])
                     series_interp = _interp_to_time(r_time, series, ps.time_s)
-                    corr = _safe_corr(ps.p_hat, series_interp, method=method, min_samples=min_samples)
+                    series_for_corr = compute_time_derivative(ps.time_s, series_interp) if use_derivative else series_interp
+                    corr = _safe_corr(pain_series, series_for_corr, method=method, min_samples=min_samples)
                     region_scores[region] = corr
 
         return video_name, region_scores
@@ -933,15 +987,68 @@ def compute_pain_region_correlations(
     if columns:
         corr_df = corr_df.reindex(columns=columns)
 
-    summary_df = pd.DataFrame({
-        "mean": corr_df.mean(axis=0, skipna=True),
-        "std": corr_df.std(axis=0, ddof=1, skipna=True),
-        "n": corr_df.count(axis=0),
-    })
+    summary_legacy = _summarize_corr_table(corr_df)
+    summary_all = summary_legacy.add_suffix("_all")
+
+    labels_by_video = pd.Series(
+        {video_name: infer_true_label(video_name) for video_name in corr_df.index},
+        dtype=int,
+    )
+    pain_videos = labels_by_video[labels_by_video == 1].index.tolist()
+    no_pain_videos = labels_by_video[labels_by_video == 0].index.tolist()
+
+    if pain_videos:
+        summary_pain = _summarize_corr_table(corr_df.loc[pain_videos]).add_suffix("_pain")
+    else:
+        summary_pain = pd.DataFrame(index=corr_df.columns, columns=["mean_pain", "std_pain", "n_pain"], dtype=float)
+
+    if no_pain_videos:
+        summary_no_pain = _summarize_corr_table(corr_df.loc[no_pain_videos]).add_suffix("_no_pain")
+    else:
+        summary_no_pain = pd.DataFrame(
+            index=corr_df.columns,
+            columns=["mean_no_pain", "std_no_pain", "n_no_pain"],
+            dtype=float,
+        )
+
+    summary_df = pd.concat([summary_legacy, summary_all, summary_pain, summary_no_pain], axis=1)
     if columns:
         summary_df = summary_df.reindex(index=columns)
 
     return corr_df, summary_df
+
+
+def compute_pain_region_derivative_correlations(
+    results_video: Dict[str, Dict],
+    *,
+    model_name: str,
+    path_icopevid_frames: PathLike,
+    xai_root: PathLike,
+    mcdp: bool,
+    duration_s: float = 20.0,
+    ma_window: int = 30,
+    region_frame_step: int = 1,
+    region_smooth_window: int = 1,
+    mask_key: str = "mask_raw",
+    method: str = "pearson",
+    min_samples: int = 5,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Shortcut for derivative coupling: corr(dP/dt, dRegion/dt)."""
+    return compute_pain_region_correlations(
+        results_video,
+        model_name=model_name,
+        path_icopevid_frames=path_icopevid_frames,
+        xai_root=xai_root,
+        mcdp=mcdp,
+        duration_s=duration_s,
+        ma_window=ma_window,
+        region_frame_step=region_frame_step,
+        region_smooth_window=region_smooth_window,
+        mask_key=mask_key,
+        method=method,
+        min_samples=min_samples,
+        use_derivative=True,
+    )
 
 
 # Visualization (doctor-facing)
@@ -978,7 +1085,11 @@ def get_entropy(signal):
     return entropy(pk, base=2)
 
 def infer_true_label(name_for_label: str) -> int:
-    return 1 if "Pain" in name_for_label else 0
+    name = str(name_for_label).lower()
+    no_pain_markers = ("nopain", "no_pain", "no-pain", "rest", "sem_dor", "semdor")
+    if any(marker in name for marker in no_pain_markers):
+        return 0
+    return 1 if "pain" in name else 0
 
 
 def _add_background_bands(ax, thresholds: PainSignThresholds, style: PlotStyle) -> None:
@@ -1211,9 +1322,11 @@ def plot_pain_sign(
     region_top_k: int = 0,
     region_selection: str = "mean",
     region_smooth_window: int = 30,
+    derivative_corr_method: str = "pearson",
+    derivative_min_samples: int = 5,
     style: PlotStyle = PlotStyle(),
 ) -> None:
-    """Clinical plot with probability curve, region curves, and frame/XAI strip."""
+    """Clinical plot with probability, derivatives, region curves, and frame/XAI strip."""
     time = ps.time_s
     p = ps.p_hat
     metrics_hysteresis = 0.05
@@ -1228,12 +1341,27 @@ def plot_pain_sign(
     )
     has_regions = region_curves is not None
 
+    p_derivative = compute_time_derivative(time, p)
+    region_derivative: Dict[str, np.ndarray] = {}
+    region_derivative_corr: Dict[str, float] = {}
+    if has_regions and region_curves is not None:
+        for idx, region in enumerate(region_curves.labels):
+            region_interp = _interp_to_time(region_curves.time_s, region_curves.data[:, idx], time)
+            dr_dt = compute_time_derivative(time, region_interp)
+            region_derivative[region] = dr_dt
+            region_derivative_corr[region] = _safe_corr(
+                p_derivative,
+                dr_dt,
+                method=derivative_corr_method,
+                min_samples=derivative_min_samples,
+            )
+
     if has_regions:
-        fig = plt.figure(figsize=(16, 9))
-        gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.0, 1.8, 2.0], hspace=0.12)
+        fig = plt.figure(figsize=(16, 10.5))
+        gs = GridSpec(nrows=4, ncols=1, height_ratios=[2.8, 1.6, 1.8, 2.0], hspace=0.12)
     else:
-        fig = plt.figure(figsize=(16, 7.5))
-        gs = GridSpec(nrows=2, ncols=1, height_ratios=[3.2, 2.0], hspace=0.12)
+        fig = plt.figure(figsize=(16, 8.7))
+        gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.0, 1.6, 2.0], hspace=0.12)
 
     ax = fig.add_subplot(gs[0])
 
@@ -1247,7 +1375,7 @@ def plot_pain_sign(
     if idx_cross.size:
         ax.scatter(time[idx_cross], np.full(idx_cross.shape, thresholds.theta_1), s=40, color=style.uncertain_color, zorder=5, label="Decision crossings")
 
-    _format_prob_axis(ax, time, style, has_regions)
+    _format_prob_axis(ax, time, style, has_regions=True)
 
     label_txt = "Pain" if true_label == 1 else "No pain"
     pred_txt = "Pain" if ps.pred_label == 1 else "No pain"
@@ -1267,8 +1395,64 @@ def plot_pain_sign(
     ]
     ax.legend(handles=handles, loc="upper left", frameon=True, framealpha=0.9)
 
+    axd = fig.add_subplot(gs[1], sharex=ax)
+    axd.axhline(0.0, color=style.grid_color, lw=1.2, linestyle=":")
+    axd.plot(time, p_derivative, color=style.signal_color, lw=2.2, label=r"$dP/dt$")
+
     if has_regions and region_curves is not None:
-        axr = fig.add_subplot(gs[1], sharex=ax)
+        default_colors = plt.cm.get_cmap("tab20", len(region_curves.labels))
+        for idx, region in enumerate(region_curves.labels):
+            color = REGION_COLOR_MAP.get(region, default_colors(idx))
+            corr = region_derivative_corr.get(region, np.nan)
+            corr_txt = "n/a" if np.isnan(corr) else f"{corr:+.2f}"
+            axd.plot(
+                time,
+                region_derivative[region],
+                color=color,
+                lw=1.3,
+                alpha=0.82,
+                label=f"d({region})/dt | r={corr_txt}",
+            )
+
+    deriv_series = [p_derivative] + list(region_derivative.values())
+    deriv_series = [arr for arr in deriv_series if arr.size]
+    if deriv_series:
+        all_vals = np.concatenate(deriv_series)
+        all_vals = all_vals[np.isfinite(all_vals)]
+        if all_vals.size:
+            lim = float(np.percentile(np.abs(all_vals), 98))
+            lim = max(lim, 1e-4)
+            axd.set_ylim(-1.1 * lim, 1.1 * lim)
+
+    axd.set_ylabel("d/dt", fontsize=style.label_size)
+    axd.set_xlabel("")
+    axd.tick_params(axis="both", labelsize=style.tick_size)
+    axd.tick_params(labelbottom=False)
+    axd.grid(True, axis="y", alpha=0.18, color=style.grid_color)
+    axd.grid(False, axis="x")
+    if time.size:
+        axd.set_xlim(time.min(), time.max())
+
+    if has_regions and region_derivative:
+        n_items = 1 + len(region_derivative)
+        if n_items <= 5:
+            ncol = 1
+        elif n_items <= 10:
+            ncol = 2
+        else:
+            ncol = 3
+        axd.legend(
+            loc="upper left",
+            frameon=True,
+            framealpha=0.9,
+            fontsize=max(7, style.tick_size - 3),
+            ncol=ncol,
+        )
+    else:
+        axd.legend(loc="upper left", frameon=True, framealpha=0.9)
+
+    if has_regions and region_curves is not None:
+        axr = fig.add_subplot(gs[2], sharex=ax)
         region_dict = {region: region_curves.data[:, idx] for idx, region in enumerate(region_curves.labels)}
         default_colors = plt.cm.get_cmap("tab20", len(region_curves.labels))
         region_colors = [REGION_COLOR_MAP.get(region, default_colors(idx)) for idx, region in enumerate(region_curves.labels)]
@@ -1290,9 +1474,9 @@ def plot_pain_sign(
         axr.set_ylim(0, 1)
         if time.size:
             axr.set_xlim(time.min(), time.max())
-        ax_strip = fig.add_subplot(gs[2])
+        ax_strip = fig.add_subplot(gs[3])
     else:
-        ax_strip = fig.add_subplot(gs[1])
+        ax_strip = fig.add_subplot(gs[2])
 
     ax_strip.imshow(strip_img)
     ax_strip.axis("off")
