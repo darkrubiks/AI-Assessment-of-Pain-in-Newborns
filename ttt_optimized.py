@@ -1855,9 +1855,7 @@ def plot_multi_model_pain_sign(
             sigma_txt = f"{ps.sigma_summary:.2f}"
             unc_state = "Confiável" if float(ps.sigma_summary) <= float(theta_3) else "Incerto"
         line_label = (
-            f"{display_name} / $\\hat{{p}}$ = {ps.p_summary:.2f} -> {pred_txt} / "
-            f"Tipo de sinal = {sign_type_ptbr} / "
-            f"Média $\\hat{{\\sigma}}$ = {sigma_txt} -> {unc_state}"
+            f"{display_name} | {pred_txt} ($\\hat{{p}}$={ps.p_summary:.2f}) | {sign_type_ptbr} | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
         )
         ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=colors[model_name], label=line_label)
         ax.axhline(theta_1, linestyle="--", lw=1.0, color=colors[model_name], alpha=0.35)
