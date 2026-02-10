@@ -1095,11 +1095,11 @@ def infer_true_label(name_for_label: str) -> int:
 def _format_model_name_for_plot(model_name: str) -> str:
     compact = "".join(ch for ch in str(model_name).lower() if ch.isalnum())
     if "vggface" in compact:
-        return "VGG-Face"
+        return "VGGFace"
     if "ncnn" in compact:
         return "N-CNN"
     if "vit" in compact:
-        return "ViT-B/16"
+        return "ViT-B/32"
     return str(model_name)
 
 
@@ -1519,6 +1519,16 @@ def _extract_frame_row(strip_img: np.ndarray, out_size: Tuple[int, int]) -> np.n
     return strip_img[:h, :, :]
 
 
+def _strip_aspect_for_square_pixels(img: np.ndarray, t_max: float) -> float:
+    """Return an imshow aspect that preserves square pixels for extent=[0, t_max]x[0, 1]."""
+    if img.ndim < 2:
+        return 1.0
+    h, w = img.shape[:2]
+    if h <= 0 or w <= 0 or t_max <= 0:
+        return 1.0
+    return float(t_max) * (float(h) / float(w))
+
+
 def plot_multi_model_pain_sign(
     *,
     video_name: str,
@@ -1630,13 +1640,13 @@ def plot_multi_model_pain_sign(
     if t_max <= 0:
         t_max = float(duration_s)
 
-    fig_h = max(7.2, 4.2 + 1.35 * (1 + len(model_order)))
-    fig = plt.figure(figsize=(17, fig_h))
+    fig_h = max(7.8, 4.8 + 1.1 * (1 + len(model_order)))
+    fig = plt.figure(figsize=(18.5, fig_h))
     gs = GridSpec(
         nrows=2 + len(model_order),
         ncols=1,
-        height_ratios=[3.2, 1.05] + [1.05] * len(model_order),
-        hspace=0.10,
+        height_ratios=[3.2, 0.8] + [0.8] * len(model_order),
+        hspace=0.02,
     )
 
     ax = fig.add_subplot(gs[0])
@@ -1683,11 +1693,15 @@ def plot_multi_model_pain_sign(
         bbox_to_anchor=(0.5, 1.10),
         ncol=max(1, min(3, len(model_order))),
         frameon=False,
-        fontsize=style.title_size,
+        fontsize=style.tick_size,
     )
 
     ax_frames = fig.add_subplot(gs[1], sharex=ax)
-    ax_frames.imshow(frames_row, aspect="auto", extent=[0.0, t_max, 0.0, 1.0])
+    ax_frames.imshow(
+        frames_row,
+        aspect=_strip_aspect_for_square_pixels(frames_row, t_max),
+        extent=[0.0, t_max, 0.0, 1.0],
+    )
     ax_frames.set_yticks([])
     ax_frames.set_ylabel("Frames", fontsize=max(8, style.tick_size - 1))
     ax_frames.tick_params(axis="x", labelsize=style.tick_size)
@@ -1699,9 +1713,13 @@ def plot_multi_model_pain_sign(
     for row_idx, model_name in enumerate(model_order, start=2):
         ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
         overlay_row = overlay_by_model[model_name]
-        ax_row.imshow(overlay_row, aspect="auto", extent=[0.0, t_max, 0.0, 1.0])
+        ax_row.imshow(
+            overlay_row,
+            aspect=_strip_aspect_for_square_pixels(overlay_row, t_max),
+            extent=[0.0, t_max, 0.0, 1.0],
+        )
         ax_row.set_yticks([])
-        ax_row.set_ylabel(f"{model_name} XAI", fontsize=max(8, style.tick_size - 1))
+        ax_row.set_ylabel(_format_model_name_for_plot(model_name), fontsize=max(8, style.tick_size - 1))
         ax_row.tick_params(axis="x", labelsize=style.tick_size)
         if row_idx < last_row_idx:
             ax_row.tick_params(labelbottom=False)
