@@ -1092,6 +1092,17 @@ def infer_true_label(name_for_label: str) -> int:
     return 1 if "pain" in name else 0
 
 
+def _format_model_name_for_plot(model_name: str) -> str:
+    compact = "".join(ch for ch in str(model_name).lower() if ch.isalnum())
+    if "vggface" in compact:
+        return "VGG-Face"
+    if "ncnn" in compact:
+        return "N-CNN"
+    if "vit" in compact:
+        return "ViT-B/16"
+    return str(model_name)
+
+
 def _add_background_bands(ax, thresholds: PainSignThresholds, style: PlotStyle) -> None:
     ax.axhspan(0, thresholds.theta_1, alpha=style.band_no_pain_alpha, color=style.band_no_pain_color, lw=0)
     ax.axhspan(thresholds.theta_1, 1, alpha=style.band_pain_alpha, color=style.band_pain_color, lw=0)
@@ -1546,7 +1557,7 @@ def plot_multi_model_pain_sign(
     if not video_dir.exists():
         raise FileNotFoundError(f"Video directory not found: {video_dir}")
 
-    default_palette = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b"]
+    default_palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#17becf"]
     colors = {} if model_colors is None else dict(model_colors)
 
     pain_sign_by_model: Dict[str, PainSignResult] = {}
@@ -1630,25 +1641,50 @@ def plot_multi_model_pain_sign(
 
     ax = fig.add_subplot(gs[0])
     true_label = infer_true_label(video_name)
-    label_txt = "Pain" if true_label == 1 else "No pain"
-    ax.set_title(f"{video_name} | True: {label_txt}", fontsize=style.title_size, pad=10)
+    label_txt = "Pain" if true_label == 1 else "No Pain"
+    ax.set_title(f"Ground-Truth Label = {label_txt}", fontsize=style.title_size, y=1.07)
+
 
     for model_name in model_order:
         ps = pain_sign_by_model[model_name]
-        pred_txt = "Pain" if ps.pred_label == 1 else "No pain"
+        display_name = _format_model_name_for_plot(model_name)
+        pred_txt = "Pain" if ps.pred_label == 1 else "No Pain"
         theta_1 = thresholds_by_model[model_name].theta_1
-        line_label = f"{model_name}: mean p={ps.p_summary:.3f} ({pred_txt})"
+        idx_cross = theta_crossings(ps.p_hat, theta_1)
+        entropy_val = float(get_entropy(ps.p_hat)) if ps.p_hat.size else float("nan")
+        line_label = (
+            f"{display_name} / $\\hat{{p}}$ = {ps.p_summary:.2f} -> {pred_txt} / "
+            f"Entropy = {entropy_val:.2f} / Crossings = {int(idx_cross.size)}"
+        )
         ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=colors[model_name], label=line_label)
-        ax.axhline(theta_1, linestyle=":", lw=1.0, color=colors[model_name], alpha=0.28)
+        ax.axhline(theta_1, linestyle="--", lw=1.0, color=colors[model_name], alpha=0.35)
+        if idx_cross.size and ps.p_hat.size:
+            cross_idx = np.clip(idx_cross, 0, ps.p_hat.size - 1)
+            ax.scatter(
+                ps.time_s[cross_idx],
+                ps.p_hat[cross_idx],
+                s=28,
+                marker="o",
+                facecolor=colors[model_name],
+                edgecolor="#1C1C1C",
+                linewidths=0.7,
+                zorder=6,
+            )
 
     ax.set_xlim(0.0, t_max)
     ax.set_ylim(-0.02, 1.02)
-    ax.set_ylabel("Pain probability", fontsize=style.label_size)
+    ax.set_ylabel("Pain Probability", fontsize=style.label_size)
     ax.tick_params(axis="both", labelsize=style.tick_size)
     ax.tick_params(labelbottom=False)
     ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
     ax.grid(False, axis="x")
-    ax.legend(loc="upper left", frameon=True, fontsize=max(8, style.tick_size - 1))
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.10),
+        ncol=max(1, min(3, len(model_order))),
+        frameon=False,
+        fontsize=style.title_size,
+    )
 
     ax_frames = fig.add_subplot(gs[1], sharex=ax)
     ax_frames.imshow(frames_row, aspect="auto", extent=[0.0, t_max, 0.0, 1.0])
@@ -1670,7 +1706,7 @@ def plot_multi_model_pain_sign(
         if row_idx < last_row_idx:
             ax_row.tick_params(labelbottom=False)
         else:
-            ax_row.set_xlabel("Time (s)", fontsize=style.label_size)
+            ax_row.set_xlabel("Time [s]", fontsize=style.label_size)
         for spine in ax_row.spines.values():
             spine.set_visible(False)
 
