@@ -741,8 +741,11 @@ def compute_pain_sign_metrics(
     Definitions (with hysteresis band around theta_1):
     - Pain time: p_hat >= theta_1 + hysteresis
     - No-pain time: p_hat <= theta_1 - hysteresis
+    - Precision pain time (theta_2 on): p_hat >= theta_2_high
+    - Precision no-pain time (theta_2 off): p_hat <= theta_2_low
     - Indeterminate time: between those bounds
     - Uncertainty time: sigma_hat > theta_3
+    - Indeterminate+uncertainty time: indeterminate time + uncertainty time
     - False alarm time: per-sample prediction != true_label (if provided)
     - Switching rate: transitions between pain and no-pain per second (indeterminate ignored)
     """
@@ -762,12 +765,15 @@ def compute_pain_sign_metrics(
 
     pain_time_s = _duration_from_mask(time_s, pain_mask)
     no_pain_time_s = _duration_from_mask(time_s, no_pain_mask)
+    precision_pain_time_s = _duration_from_mask(time_s, p >= thresholds.theta_2_high)
+    precision_no_pain_time_s = _duration_from_mask(time_s, p <= thresholds.theta_2_low)
     indeterminate_time_s = _duration_from_mask(time_s, indeterminate_mask)
 
     if sigma is None or sigma.size == 0:
         uncertainty_time_s = 0.0
     else:
         uncertainty_time_s = _duration_from_mask(time_s, sigma > thresholds.theta_3)
+    indeterminate_uncertainty_time_s = indeterminate_time_s + uncertainty_time_s
 
     if true_label is None:
         false_alarm_time_s = float("nan")
@@ -787,12 +793,217 @@ def compute_pain_sign_metrics(
         "total_time_s": float(total_time_s),
         "pain_time_s": float(pain_time_s),
         "no_pain_time_s": float(no_pain_time_s),
+        "precision_pain_time_s": float(precision_pain_time_s),
+        "precision_no_pain_time_s": float(precision_no_pain_time_s),
         "indeterminate_time_s": float(indeterminate_time_s),
         "uncertainty_time_s": float(uncertainty_time_s),
+        "indeterminate_uncertainty_time_s": float(indeterminate_uncertainty_time_s),
         "false_alarm_time_s": float(false_alarm_time_s),
         "switch_count": float(switch_count),
         "switching_rate_hz": float(switching_rate_hz),
     }
+
+
+# ---------------------------------------------------------------------
+# Multi-model video metrics table + summary figure
+# ---------------------------------------------------------------------
+
+def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    num = pd.to_numeric(numerator, errors="coerce").to_numpy(dtype=float)
+    den = pd.to_numeric(denominator, errors="coerce").to_numpy(dtype=float)
+    out = np.full_like(den, np.nan, dtype=float)
+    valid = np.isfinite(num) & np.isfinite(den) & (den > 0)
+    out[valid] = num[valid] / den[valid]
+    return pd.Series(out, index=denominator.index, dtype=float)
+
+
+def _resolve_threshold_for_model(
+    model_name: str,
+    thresholds_by_model_or_single: Union[Dict[str, PainSignThresholds], PainSignThresholds],
+) -> PainSignThresholds:
+    if isinstance(thresholds_by_model_or_single, dict):
+        if model_name not in thresholds_by_model_or_single:
+            raise KeyError(
+                f"Missing thresholds for model '{model_name}'. "
+                f"Available: {list(thresholds_by_model_or_single.keys())}"
+            )
+        return thresholds_by_model_or_single[model_name]
+    return thresholds_by_model_or_single
+
+
+def compute_video_metrics_table(
+    ps_by_model: Dict[str, PainSignResult],
+    thresholds_by_model_or_single: Union[Dict[str, PainSignThresholds], PainSignThresholds],
+    true_label: Optional[int] = None,
+    hysteresis: float = 0.05,
+) -> pd.DataFrame:
+    """
+    Compute pain-sign timing metrics for multiple models on the same segment.
+    """
+    if not ps_by_model:
+        return pd.DataFrame()
+
+    rows = []
+    for model_name, ps in ps_by_model.items():
+        thresholds = _resolve_threshold_for_model(model_name, thresholds_by_model_or_single)
+        metrics = compute_pain_sign_metrics(
+            ps,
+            thresholds,
+            true_label=true_label,
+            hysteresis=hysteresis,
+        )
+        row = {"model": model_name}
+        row.update(metrics)
+        rows.append(row)
+
+    df = pd.DataFrame(rows).set_index("model")
+    total_time = pd.to_numeric(df["total_time_s"], errors="coerce")
+
+    uncertainty_ratio = _safe_ratio(df["uncertainty_time_s"], total_time)
+    df["coverage"] = 1.0 - uncertainty_ratio
+    df["false_alarm_rate"] = _safe_ratio(df["false_alarm_time_s"], total_time)
+    df["pain_pct"] = _safe_ratio(df["pain_time_s"], total_time)
+    df["no_pain_pct"] = _safe_ratio(df["no_pain_time_s"], total_time)
+    df["uncertainty_pct"] = uncertainty_ratio
+    df["indeterminate_pct"] = _safe_ratio(df["indeterminate_time_s"], total_time)
+
+    return df
+
+
+def plot_video_metrics(
+    df: pd.DataFrame,
+    true_label: Optional[int],
+    title: Optional[str] = None,
+) -> matplotlib.figure.Figure:
+    """
+    Plot a 3-panel summary figure of multi-model video metrics.
+    """
+    if df is None or df.empty:
+        raise ValueError("df is empty. Run compute_video_metrics_table first.")
+
+    models = [str(m) for m in df.index.tolist()]
+    y = np.arange(len(models), dtype=float)
+    x = np.arange(len(models), dtype=float)
+
+    def _series(name: str, fill: float = 0.0) -> np.ndarray:
+        if name not in df.columns:
+            return np.full(len(df), fill, dtype=float)
+        s = pd.to_numeric(df[name], errors="coerce")
+        return s.fillna(fill).to_numpy(dtype=float)
+
+    no_pain_s = _series("no_pain_time_s", fill=0.0)
+    pain_s = _series("pain_time_s", fill=0.0)
+    indet_s = _series("indeterminate_time_s", fill=0.0)
+    unc_s = _series("uncertainty_time_s", fill=0.0)
+    total_s = _series("total_time_s", fill=0.0)
+
+    pain_pct = _series("pain_pct", fill=np.nan)
+    no_pain_pct = _series("no_pain_pct", fill=np.nan)
+    uncertainty_pct = _series("uncertainty_pct", fill=np.nan)
+    indeterminate_pct = _series("indeterminate_pct", fill=np.nan)
+
+    coverage = np.clip(_series("coverage", fill=np.nan), 0.0, 1.0)
+    false_alarm_rate = np.clip(_series("false_alarm_rate", fill=np.nan), 0.0, 1.0)
+    false_alarm_time_s = _series("false_alarm_time_s", fill=np.nan)
+    switching_rate_hz = _series("switching_rate_hz", fill=np.nan)
+    switch_count = _series("switch_count", fill=np.nan)
+
+    fig, (ax1, ax2, ax3) = plt.subplots(
+        3,
+        1,
+        figsize=(12, 8),
+        gridspec_kw={"height_ratios": (2.2, 1.2, 1.1), "hspace": 0.35},
+    )
+
+    left = np.zeros(len(df), dtype=float)
+    ax1.barh(y, no_pain_s, left=left, label="No pain")
+    left = left + no_pain_s
+    ax1.barh(y, pain_s, left=left, label="Pain")
+    left = left + pain_s
+    ax1.barh(y, indet_s, left=left, label="Indeterminate")
+    left = left + indet_s
+    ax1.barh(y, unc_s, left=left, label="Uncertainty")
+
+    plot_total = np.maximum(total_s, no_pain_s + pain_s + indet_s + unc_s)
+    x_max = float(np.nanmax(plot_total)) if np.any(np.isfinite(plot_total)) else 0.0
+    if x_max <= 0:
+        x_max = 1.0
+
+    for i in range(len(df)):
+        p = pain_pct[i] * 100.0 if np.isfinite(pain_pct[i]) else np.nan
+        npct = no_pain_pct[i] * 100.0 if np.isfinite(no_pain_pct[i]) else np.nan
+        upct = uncertainty_pct[i] * 100.0 if np.isfinite(uncertainty_pct[i]) else np.nan
+        ipct = indeterminate_pct[i] * 100.0 if np.isfinite(indeterminate_pct[i]) else np.nan
+        label_text = (
+            f"Pain: {p:.1f}% | No pain: {npct:.1f}% | "
+            f"Unc.: {upct:.1f}% | Indet.: {ipct:.1f}%"
+        )
+        ax1.text(
+            plot_total[i] + (0.01 * x_max),
+            y[i],
+            label_text,
+            va="center",
+            ha="left",
+            fontsize=8,
+        )
+
+    ax1.set_yticks(y)
+    ax1.set_yticklabels(models)
+    ax1.invert_yaxis()
+    ax1.set_xlim(0.0, x_max * 1.55)
+    ax1.set_xlabel("Duration (s)")
+    ax1.set_title("Temporal composition by model")
+    ax1.legend(loc="upper right", ncols=2)
+    ax1.grid(axis="x", alpha=0.2)
+
+    width = 0.35
+    if true_label is not None:
+        ax2.bar(x - width / 2.0, coverage, width=width, label="Coverage")
+        ax2.bar(x + width / 2.0, false_alarm_rate, width=width, label="False alarm rate")
+        ax2.set_title("Reliability and error")
+    else:
+        ax2.bar(x, coverage, width=width * 1.4, label="Coverage")
+        for i, v in enumerate(false_alarm_time_s):
+            txt = "n/a" if not np.isfinite(v) else f"{v:.1f}s"
+            y_txt = 0.03
+            if np.isfinite(coverage[i]):
+                y_txt = min(0.98, float(coverage[i]) + 0.03)
+            ax2.text(x[i], y_txt, f"False alarm: {txt}", ha="center", fontsize=8)
+        ax2.set_title("Reliability (false alarm rate unavailable)")
+
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(models)
+    ax2.set_ylim(0.0, 1.0)
+    ax2.set_ylabel("Ratio")
+    ax2.grid(axis="y", alpha=0.2)
+    ax2.legend(loc="upper right")
+
+    bar3 = ax3.bar(x, switching_rate_hz, label="Switching rate (Hz)")
+    for i, b in enumerate(bar3):
+        count_txt = "n/a" if not np.isfinite(switch_count[i]) else str(int(round(switch_count[i])))
+        y_pos = b.get_height()
+        if not np.isfinite(y_pos):
+            y_pos = 0.0
+        ax3.text(
+            b.get_x() + b.get_width() / 2.0,
+            y_pos + 0.01 * max(1.0, np.nanmax(np.nan_to_num(switching_rate_hz, nan=0.0))),
+            f"n={count_txt}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(models)
+    ax3.set_ylabel("Hz")
+    ax3.set_title("Temporal stability")
+    ax3.grid(axis="y", alpha=0.2)
+
+    label_map = {0: "No pain", 1: "Pain"}
+    true_txt = label_map.get(true_label, "Unknown")
+    fig.suptitle(title if title is not None else f"Video metrics | True: {true_txt}")
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+    return fig
 
 
 # ---------------------------------------------------------------------
@@ -1296,15 +1507,20 @@ def _format_metrics_summary(metrics: Dict[str, float], *, hysteresis: float) -> 
 
     pain_time = _fmt_time(metrics.get("pain_time_s", float("nan")))
     no_pain_time = _fmt_time(metrics.get("no_pain_time_s", float("nan")))
+    precision_pain_time = _fmt_time(metrics.get("precision_pain_time_s", float("nan")))
+    precision_no_pain_time = _fmt_time(metrics.get("precision_no_pain_time_s", float("nan")))
     indeterminate_time = _fmt_time(metrics.get("indeterminate_time_s", float("nan")))
     uncertainty_time = _fmt_time(metrics.get("uncertainty_time_s", float("nan")))
+    indeterminate_uncertainty_time = _fmt_time(metrics.get("indeterminate_uncertainty_time_s", float("nan")))
     false_alarm_time = _fmt_time(metrics.get("false_alarm_time_s", float("nan")))
     switch_count = _fmt_count(metrics.get("switch_count", float("nan")))
     switch_rate = _fmt_rate(metrics.get("switching_rate_hz", float("nan")))
 
     lines = [
         f"Tempo de dor={pain_time}s | Tempo sem dor={no_pain_time}s",
+        f"Precisao dor (theta_2,on)={precision_pain_time}s | Precisao sem dor (theta_2,off)={precision_no_pain_time}s",
         f"Indeterminado (+/-{hysteresis:.2f})={indeterminate_time}s | Incerteza={uncertainty_time}s",
+        f"Indeterminado+Incerteza={indeterminate_uncertainty_time}s",
         f"Falso alarme={false_alarm_time}s | Trocas={switch_count} ({switch_rate} Hz)",
     ]
     return "\n".join(lines)
