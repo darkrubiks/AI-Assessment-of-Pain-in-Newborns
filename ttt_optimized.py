@@ -876,7 +876,7 @@ def plot_video_metrics(
     title: Optional[str] = None,
 ) -> matplotlib.figure.Figure:
     """
-    Plot a 3-panel summary figure of multi-model video metrics.
+    Plot a 2-panel summary figure of multi-model video metrics.
     """
     if df is None or df.empty:
         raise ValueError("df is empty. Run compute_video_metrics_table first.")
@@ -893,26 +893,35 @@ def plot_video_metrics(
 
     no_pain_s = _series("no_pain_time_s", fill=0.0)
     pain_s = _series("pain_time_s", fill=0.0)
-    indet_s = _series("indeterminate_time_s", fill=0.0)
-    unc_s = _series("uncertainty_time_s", fill=0.0)
+    precision_no_pain_s = _series("precision_no_pain_time_s", fill=0.0)
+    precision_pain_s = _series("precision_pain_time_s", fill=0.0)
+    indet_combined_s = _series("indeterminate_uncertainty_time_s", fill=np.nan)
+    if not np.any(np.isfinite(indet_combined_s)):
+        indet_combined_s = _series("indeterminate_time_s", fill=0.0) + _series("uncertainty_time_s", fill=0.0)
+    indet_combined_s = np.nan_to_num(indet_combined_s, nan=0.0)
     total_s = _series("total_time_s", fill=0.0)
 
     pain_pct = _series("pain_pct", fill=np.nan)
     no_pain_pct = _series("no_pain_pct", fill=np.nan)
-    uncertainty_pct = _series("uncertainty_pct", fill=np.nan)
-    indeterminate_pct = _series("indeterminate_pct", fill=np.nan)
+    indet_combined_pct = np.full(len(df), np.nan, dtype=float)
+    precision_pain_pct = np.full(len(df), np.nan, dtype=float)
+    precision_no_pain_pct = np.full(len(df), np.nan, dtype=float)
+    valid_total = np.isfinite(total_s) & (total_s > 0)
+    indet_combined_pct[valid_total] = indet_combined_s[valid_total] / total_s[valid_total]
+    precision_pain_pct[valid_total] = precision_pain_s[valid_total] / total_s[valid_total]
+    precision_no_pain_pct[valid_total] = precision_no_pain_s[valid_total] / total_s[valid_total]
 
     coverage = np.clip(_series("coverage", fill=np.nan), 0.0, 1.0)
     false_alarm_rate = np.clip(_series("false_alarm_rate", fill=np.nan), 0.0, 1.0)
     false_alarm_time_s = _series("false_alarm_time_s", fill=np.nan)
-    switching_rate_hz = _series("switching_rate_hz", fill=np.nan)
-    switch_count = _series("switch_count", fill=np.nan)
 
-    fig, (ax1, ax2, ax3) = plt.subplots(
-        3,
+    n_models = len(models)
+    fig_h = max(7.5, 4.8 + 0.9 * n_models)
+    fig, (ax1, ax2) = plt.subplots(
+        2,
         1,
-        figsize=(12, 8),
-        gridspec_kw={"height_ratios": (2.2, 1.2, 1.1), "hspace": 0.35},
+        figsize=(16, fig_h),
+        gridspec_kw={"height_ratios": (2.4, 1.2), "hspace": 0.42},
     )
 
     left = np.zeros(len(df), dtype=float)
@@ -920,40 +929,74 @@ def plot_video_metrics(
     left = left + no_pain_s
     ax1.barh(y, pain_s, left=left, label="Pain")
     left = left + pain_s
-    ax1.barh(y, indet_s, left=left, label="Indeterminate")
-    left = left + indet_s
-    ax1.barh(y, unc_s, left=left, label="Uncertainty")
+    ax1.barh(y, indet_combined_s, left=left, label="Indeterminate+Uncertainty")
 
-    plot_total = np.maximum(total_s, no_pain_s + pain_s + indet_s + unc_s)
+    # Precision windows overlaid as hatched segments inside no-pain and pain durations.
+    ax1.barh(
+        y,
+        precision_no_pain_s,
+        left=np.zeros(len(df), dtype=float),
+        height=0.50,
+        facecolor="white",
+        alpha=0.38,
+        edgecolor="black",
+        hatch="////",
+        linewidth=0.9,
+        zorder=4,
+        label="Precision no-pain (theta_2 off)",
+    )
+    ax1.barh(
+        y,
+        precision_pain_s,
+        left=no_pain_s,
+        height=0.50,
+        facecolor="white",
+        alpha=0.38,
+        edgecolor="black",
+        hatch="xxxx",
+        linewidth=0.9,
+        zorder=4,
+        label="Precision pain (theta_2 on)",
+    )
+
+    plot_total = np.maximum(total_s, no_pain_s + pain_s + indet_combined_s)
     x_max = float(np.nanmax(plot_total)) if np.any(np.isfinite(plot_total)) else 0.0
     if x_max <= 0:
         x_max = 1.0
 
+    ann_font = 8 if n_models <= 8 else 7
     for i in range(len(df)):
         p = pain_pct[i] * 100.0 if np.isfinite(pain_pct[i]) else np.nan
         npct = no_pain_pct[i] * 100.0 if np.isfinite(no_pain_pct[i]) else np.nan
-        upct = uncertainty_pct[i] * 100.0 if np.isfinite(uncertainty_pct[i]) else np.nan
-        ipct = indeterminate_pct[i] * 100.0 if np.isfinite(indeterminate_pct[i]) else np.nan
+        ipct = indet_combined_pct[i] * 100.0 if np.isfinite(indet_combined_pct[i]) else np.nan
+        pprec = precision_pain_pct[i] * 100.0 if np.isfinite(precision_pain_pct[i]) else np.nan
+        nprec = precision_no_pain_pct[i] * 100.0 if np.isfinite(precision_no_pain_pct[i]) else np.nan
         label_text = (
             f"Pain: {p:.1f}% | No pain: {npct:.1f}% | "
-            f"Unc.: {upct:.1f}% | Indet.: {ipct:.1f}%"
+            f"Indet.+Unc.: {ipct:.1f}% | "
+            f"Prec pain: {pprec:.1f}% | Prec no-pain: {nprec:.1f}%"
         )
         ax1.text(
-            plot_total[i] + (0.01 * x_max),
+            plot_total[i] + (0.015 * x_max),
             y[i],
             label_text,
             va="center",
             ha="left",
-            fontsize=8,
+            fontsize=ann_font,
         )
 
     ax1.set_yticks(y)
     ax1.set_yticklabels(models)
     ax1.invert_yaxis()
-    ax1.set_xlim(0.0, x_max * 1.55)
+    ax1.set_xlim(0.0, x_max * 2.0)
     ax1.set_xlabel("Duration (s)")
     ax1.set_title("Temporal composition by model")
-    ax1.legend(loc="upper right", ncols=2)
+    ax1.legend(
+        loc="lower left",
+        bbox_to_anchor=(0.0, 1.01),
+        ncols=2,
+        frameon=True,
+    )
     ax1.grid(axis="x", alpha=0.2)
 
     width = 0.35
@@ -978,31 +1021,10 @@ def plot_video_metrics(
     ax2.grid(axis="y", alpha=0.2)
     ax2.legend(loc="upper right")
 
-    bar3 = ax3.bar(x, switching_rate_hz, label="Switching rate (Hz)")
-    for i, b in enumerate(bar3):
-        count_txt = "n/a" if not np.isfinite(switch_count[i]) else str(int(round(switch_count[i])))
-        y_pos = b.get_height()
-        if not np.isfinite(y_pos):
-            y_pos = 0.0
-        ax3.text(
-            b.get_x() + b.get_width() / 2.0,
-            y_pos + 0.01 * max(1.0, np.nanmax(np.nan_to_num(switching_rate_hz, nan=0.0))),
-            f"n={count_txt}",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
-
-    ax3.set_xticks(x)
-    ax3.set_xticklabels(models)
-    ax3.set_ylabel("Hz")
-    ax3.set_title("Temporal stability")
-    ax3.grid(axis="y", alpha=0.2)
-
     label_map = {0: "No pain", 1: "Pain"}
     true_txt = label_map.get(true_label, "Unknown")
     fig.suptitle(title if title is not None else f"Video metrics | True: {true_txt}")
-    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.97))
     return fig
 
 
