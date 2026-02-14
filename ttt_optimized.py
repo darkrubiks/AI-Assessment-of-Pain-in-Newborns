@@ -12,7 +12,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    brier_score_loss,
+    f1_score,
+    log_loss,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from scipy.stats import entropy
 from scipy.signal import find_peaks
 from matplotlib.gridspec import GridSpec
@@ -830,6 +839,196 @@ def _combined_theta_keep_mask(
     keep = keep[:n]
     sigma_ok = sigma[:n] <= float(thresholds.theta_3)
     return keep & sigma_ok
+
+
+def _safe_roc_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    classes = np.unique(np.asarray(y_true, dtype=int))
+    if classes.size < 2:
+        return float("nan")
+    return float(roc_auc_score(y_true, y_score))
+
+
+def _safe_pr_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    classes = np.unique(np.asarray(y_true, dtype=int))
+    if classes.size < 2:
+        return float("nan")
+    return float(average_precision_score(y_true, y_score))
+
+
+def compute_video_classification_metrics_no_thresholds(
+    results_video: Dict[str, Dict],
+    *,
+    model_name: str,
+    mcdp: bool,
+    ma_window: int = 30,
+    duration_s: float = 20.0,
+) -> Tuple[pd.DataFrame, Dict[str, float]]:
+    """
+    Compute threshold-free video classification metrics.
+
+    This function does not apply theta_2/theta_3 filtering and does not threshold
+    probabilities into hard classes. It uses per-video `p_summary` as a continuous
+    score and reports threshold-free metrics (ROC-AUC, PR-AUC, Brier, LogLoss).
+
+    Returns:
+    - per_video_df: per-video scores (`true_label`, `p_summary`).
+    - summary: aggregate threshold-free metrics.
+    """
+    if not results_video:
+        return pd.DataFrame(), {
+            "n_videos_total": 0.0,
+            "n_videos_valid": 0.0,
+            "roc_auc": float("nan"),
+            "pr_auc": float("nan"),
+            "brier": float("nan"),
+            "log_loss": float("nan"),
+            "avg_probability": float("nan"),
+        }
+
+    thresholds = get_thresholds_for_model(model_name)
+    rows: List[Dict[str, Union[str, int, float]]] = []
+
+    for video_name in sorted(results_video.keys()):
+        true_label = infer_true_label(video_name)
+        ps = compute_pain_sign(
+            results_video[video_name],
+            mcdp=mcdp,
+            theta_1=thresholds.theta_1,
+            ma_window=ma_window,
+            duration_s=duration_s,
+        )
+        rows.append(
+            {
+                "video": video_name,
+                "true_label": int(true_label),
+                "p_summary": float(ps.p_summary),
+            }
+        )
+
+    per_video_df = pd.DataFrame(rows).set_index("video")
+    valid_df = per_video_df[per_video_df["p_summary"].notna()].copy()
+
+    if valid_df.empty:
+        summary = {
+            "n_videos_total": float(len(per_video_df)),
+            "n_videos_valid": 0.0,
+            "roc_auc": float("nan"),
+            "pr_auc": float("nan"),
+            "brier": float("nan"),
+            "log_loss": float("nan"),
+            "avg_probability": float("nan"),
+        }
+        return per_video_df, summary
+
+    y_true = pd.to_numeric(valid_df["true_label"], errors="coerce").to_numpy(dtype=int)
+    y_score_raw = pd.to_numeric(valid_df["p_summary"], errors="coerce").to_numpy(dtype=float)
+    y_score = np.clip(y_score_raw, 1e-7, 1.0 - 1e-7)
+
+    summary = {
+        "n_videos_total": float(len(per_video_df)),
+        "n_videos_valid": float(len(valid_df)),
+        "roc_auc": _safe_roc_auc(y_true, y_score),
+        "pr_auc": _safe_pr_auc(y_true, y_score),
+        "brier": float(brier_score_loss(y_true, y_score)),
+        "log_loss": float(log_loss(y_true, y_score, labels=[0, 1])),
+        "avg_probability": float(np.mean(y_score)),
+    }
+    return per_video_df, summary
+
+
+def compute_video_classification_metrics_no_theta_filter(
+    results_video: Dict[str, Dict],
+    *,
+    model_name: str,
+    mcdp: bool,
+    ma_window: int = 30,
+    duration_s: float = 20.0,
+    decision_threshold: float = 0.5,
+) -> Tuple[pd.DataFrame, Dict[str, float]]:
+    """
+    Compute hard classification metrics without theta_2/theta_3 sample filtering.
+
+    A single decision threshold is still required for hard labels:
+    pred = 1 if p_summary >= decision_threshold else 0
+    """
+    if not (0.0 <= float(decision_threshold) <= 1.0):
+        raise ValueError("decision_threshold must be in [0, 1]")
+    if not results_video:
+        return pd.DataFrame(), {
+            "n_videos_total": 0.0,
+            "n_videos_classified": 0.0,
+            "accuracy": float("nan"),
+            "precision": float("nan"),
+            "recall": float("nan"),
+            "f1": float("nan"),
+            "roc_auc": float("nan"),
+            "pr_auc": float("nan"),
+            "brier": float("nan"),
+            "log_loss": float("nan"),
+            "avg_probability": float("nan"),
+        }
+
+    thresholds = get_thresholds_for_model(model_name)
+    rows: List[Dict[str, Union[str, int, float]]] = []
+
+    for video_name in sorted(results_video.keys()):
+        true_label = infer_true_label(video_name)
+        ps = compute_pain_sign(
+            results_video[video_name],
+            mcdp=mcdp,
+            theta_1=thresholds.theta_1,
+            ma_window=ma_window,
+            duration_s=duration_s,
+        )
+        p_summary = float(ps.p_summary)
+        pred_label = int(p_summary >= float(decision_threshold)) if np.isfinite(p_summary) else np.nan
+        rows.append(
+            {
+                "video": video_name,
+                "true_label": int(true_label),
+                "p_summary": p_summary,
+                "pred_label": pred_label,
+            }
+        )
+
+    per_video_df = pd.DataFrame(rows).set_index("video")
+    valid_df = per_video_df[per_video_df["pred_label"].notna()].copy()
+
+    if valid_df.empty:
+        summary = {
+            "n_videos_total": float(len(per_video_df)),
+            "n_videos_classified": 0.0,
+            "accuracy": float("nan"),
+            "precision": float("nan"),
+            "recall": float("nan"),
+            "f1": float("nan"),
+            "roc_auc": float("nan"),
+            "pr_auc": float("nan"),
+            "brier": float("nan"),
+            "log_loss": float("nan"),
+            "avg_probability": float("nan"),
+        }
+        return per_video_df, summary
+
+    y_true = pd.to_numeric(valid_df["true_label"], errors="coerce").to_numpy(dtype=int)
+    y_pred = pd.to_numeric(valid_df["pred_label"], errors="coerce").to_numpy(dtype=int)
+    y_score_raw = pd.to_numeric(valid_df["p_summary"], errors="coerce").to_numpy(dtype=float)
+    y_score = np.clip(y_score_raw, 1e-7, 1.0 - 1e-7)
+
+    summary = {
+        "n_videos_total": float(len(per_video_df)),
+        "n_videos_classified": float(len(valid_df)),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+        "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+        "f1": float(f1_score(y_true, y_pred, zero_division=0)),
+        "roc_auc": _safe_roc_auc(y_true, y_score),
+        "pr_auc": _safe_pr_auc(y_true, y_score),
+        "brier": float(brier_score_loss(y_true, y_score)),
+        "log_loss": float(log_loss(y_true, y_score, labels=[0, 1])),
+        "avg_probability": float(np.mean(y_score)),
+    }
+    return per_video_df, summary
 
 
 def compute_combined_theta_video_classification_metrics(
