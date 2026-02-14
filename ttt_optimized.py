@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from scipy.stats import entropy
 from scipy.signal import find_peaks
 from matplotlib.gridspec import GridSpec
@@ -40,10 +41,10 @@ class PainSignThresholds:
 def get_thresholds_for_model(model_name: str) -> PainSignThresholds:
     # Keep your current values, but isolate them here.
     if "NCNN" in model_name:
-        return PainSignThresholds(theta_1=0.4551, theta_3=0.1186*1.5, theta_2_low=0.2, theta_2_high=0.8)
+        return PainSignThresholds(theta_1=0.4551, theta_3=0.1186, theta_2_low=0.2, theta_2_high=0.8)
     if "VGGFace" in model_name:
-        return PainSignThresholds(theta_1=0.5013, theta_3=0.0621*1.5, theta_2_low=0.2, theta_2_high=0.8)
-    return PainSignThresholds(theta_1=0.4743, theta_3=0.0130*1.5, theta_2_low=0.2, theta_2_high=0.8)
+        return PainSignThresholds(theta_1=0.5013, theta_3=0.0621, theta_2_low=0.2, theta_2_high=0.8)
+    return PainSignThresholds(theta_1=0.4743, theta_3=0.0130, theta_2_low=0.2, theta_2_high=0.8)
 
 
 @dataclass(frozen=True)
@@ -802,6 +803,159 @@ def compute_pain_sign_metrics(
         "switch_count": float(switch_count),
         "switching_rate_hz": float(switching_rate_hz),
     }
+
+
+def _combined_theta_keep_mask(
+    p_hat: np.ndarray,
+    sigma_hat: Optional[np.ndarray],
+    thresholds: PainSignThresholds,
+) -> np.ndarray:
+    """
+    Keep samples that satisfy the joint theta rule:
+    - theta_2: probability is outside ambiguous band
+    - theta_3: uncertainty is below threshold (if available)
+    """
+    p = np.asarray(p_hat, dtype=float).reshape(-1)
+    if p.size == 0:
+        return np.zeros(0, dtype=bool)
+
+    keep = (p <= float(thresholds.theta_2_low)) | (p >= float(thresholds.theta_2_high))
+    if sigma_hat is None:
+        return keep
+
+    sigma = np.asarray(sigma_hat, dtype=float).reshape(-1)
+    n = min(p.size, sigma.size)
+    if n == 0:
+        return np.zeros(0, dtype=bool)
+    keep = keep[:n]
+    sigma_ok = sigma[:n] <= float(thresholds.theta_3)
+    return keep & sigma_ok
+
+
+def compute_combined_theta_video_classification_metrics(
+    results_video: Dict[str, Dict],
+    *,
+    model_name: str,
+    mcdp: bool,
+    ma_window: int = 30,
+    duration_s: float = 20.0,
+    min_kept_samples: int = 1,
+) -> Tuple[pd.DataFrame, Dict[str, float]]:
+    """
+    Compute pain-sign classification metrics with combined thresholds (theta_1, theta_2, theta_3).
+
+    Per video:
+    1) Keep only samples that pass the joint theta filter:
+       (p_hat <= theta_2_low OR p_hat >= theta_2_high) AND (sigma_hat <= theta_3, if sigma exists)
+    2) Compute removed-sample metrics from the rejected samples.
+    3) Classify the video using only the kept samples:
+       pred = 1 if mean(p_hat_kept) >= theta_1 else 0
+
+    Returns:
+    - per_video_df: per-video classification/removal metrics.
+    - summary: aggregated classification metrics and mean removed-sample metrics.
+    """
+    if min_kept_samples < 1:
+        raise ValueError("min_kept_samples must be >= 1")
+    if not results_video:
+        return pd.DataFrame(), {
+            "n_videos_total": 0.0,
+            "n_videos_classified": 0.0,
+            "n_videos_without_kept_samples": 0.0,
+            "accuracy": float("nan"),
+            "precision": float("nan"),
+            "recall": float("nan"),
+            "f1": float("nan"),
+            "avg_removed_samples": float("nan"),
+            "avg_removed_ratio": float("nan"),
+            "avg_kept_samples": float("nan"),
+            "avg_kept_ratio": float("nan"),
+            "avg_filtered_probability": float("nan"),
+        }
+
+    thresholds = get_thresholds_for_model(model_name)
+    rows: List[Dict[str, Union[str, int, float]]] = []
+
+    for video_name in sorted(results_video.keys()):
+        true_label = infer_true_label(video_name)
+        ps = compute_pain_sign(
+            results_video[video_name],
+            mcdp=mcdp,
+            theta_1=thresholds.theta_1,
+            ma_window=ma_window,
+            duration_s=duration_s,
+        )
+
+        p = np.asarray(ps.p_hat, dtype=float).reshape(-1)
+        sigma = None if ps.sigma_hat is None else np.asarray(ps.sigma_hat, dtype=float).reshape(-1)
+
+        if sigma is not None and sigma.size < p.size:
+            p = p[: sigma.size]
+
+        keep_mask = _combined_theta_keep_mask(p, sigma, thresholds)
+        n_total = int(keep_mask.size)
+        n_kept = int(np.sum(keep_mask))
+        n_removed = int(n_total - n_kept)
+
+        kept_ratio = float(n_kept / n_total) if n_total > 0 else float("nan")
+        removed_ratio = float(n_removed / n_total) if n_total > 0 else float("nan")
+
+        if n_kept >= min_kept_samples:
+            p_filtered = float(np.mean(p[:n_total][keep_mask]))
+            pred_filtered = int(p_filtered >= float(thresholds.theta_1))
+        else:
+            p_filtered = float("nan")
+            pred_filtered = np.nan
+
+        rows.append(
+            {
+                "video": video_name,
+                "true_label": int(true_label),
+                "pred_label_filtered": pred_filtered,
+                "p_summary_filtered": p_filtered,
+                "total_samples": float(n_total),
+                "kept_samples": float(n_kept),
+                "removed_samples": float(n_removed),
+                "kept_ratio": kept_ratio,
+                "removed_ratio": removed_ratio,
+            }
+        )
+
+    per_video_df = pd.DataFrame(rows).set_index("video")
+
+    valid_df = per_video_df[per_video_df["pred_label_filtered"].notna()].copy()
+    n_videos_total = float(len(per_video_df))
+    n_videos_classified = float(len(valid_df))
+    n_videos_without_kept = float(n_videos_total - n_videos_classified)
+
+    if valid_df.empty:
+        acc = float("nan")
+        prec = float("nan")
+        rec = float("nan")
+        f1 = float("nan")
+    else:
+        y_true = pd.to_numeric(valid_df["true_label"], errors="coerce").to_numpy(dtype=int)
+        y_pred = pd.to_numeric(valid_df["pred_label_filtered"], errors="coerce").to_numpy(dtype=int)
+        acc = float(accuracy_score(y_true, y_pred))
+        prec = float(precision_score(y_true, y_pred, zero_division=0))
+        rec = float(recall_score(y_true, y_pred, zero_division=0))
+        f1 = float(f1_score(y_true, y_pred, zero_division=0))
+
+    summary = {
+        "n_videos_total": n_videos_total,
+        "n_videos_classified": n_videos_classified,
+        "n_videos_without_kept_samples": n_videos_without_kept,
+        "accuracy": acc,
+        "precision": prec,
+        "recall": rec,
+        "f1": f1,
+        "avg_removed_samples": float(pd.to_numeric(per_video_df["removed_samples"], errors="coerce").mean()),
+        "avg_removed_ratio": float(pd.to_numeric(per_video_df["removed_ratio"], errors="coerce").mean()),
+        "avg_kept_samples": float(pd.to_numeric(per_video_df["kept_samples"], errors="coerce").mean()),
+        "avg_kept_ratio": float(pd.to_numeric(per_video_df["kept_ratio"], errors="coerce").mean()),
+        "avg_filtered_probability": float(pd.to_numeric(per_video_df["p_summary_filtered"], errors="coerce").mean()),
+    }
+    return per_video_df, summary
 
 
 # ---------------------------------------------------------------------
