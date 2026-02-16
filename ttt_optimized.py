@@ -1678,13 +1678,8 @@ def classify_pain_sign_type(
     near_theta_ratio: float = 0.60,
 ) -> str:
     """Return stable/irregular/unstable/indeterminate for one pain-sign curve."""
-    sigma_is_uncertain = (
-        ps.sigma_summary is not None
-        and np.isfinite(ps.sigma_summary)
-        and float(ps.sigma_summary) > float(theta_3)
-    )
-    if sigma_is_uncertain:
-        return "indeterminate"
+    # theta_3 is kept in the signature for backward compatibility, but
+    # "indeterminate" is defined only by proximity to theta_1.
 
     if _is_signal_consistently_near_theta_1(
         ps.p_hat,
