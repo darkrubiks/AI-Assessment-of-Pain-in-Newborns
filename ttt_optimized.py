@@ -15,7 +15,6 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
-    brier_score_loss,
     f1_score,
     log_loss,
     precision_score,
@@ -25,6 +24,7 @@ from sklearn.metrics import (
 from scipy.stats import entropy
 from scipy.signal import find_peaks
 from matplotlib.gridspec import GridSpec
+from calibration.metrics import ECE, MCE, brier_score, negative_log_likelihood
 from XAI.metrics import create_face_regions_masks, calculate_xai_score
 from XAI.post_processing import kmeans_post_processing
 
@@ -968,6 +968,58 @@ def _safe_pr_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
     return float(average_precision_score(y_true, y_score))
 
 
+def _safe_calibration_metrics(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    *,
+    n_bins: int = 10,
+    mode: str = "uniform",
+) -> Dict[str, float]:
+    if int(n_bins) < 2:
+        raise ValueError("calibration_n_bins must be >= 2")
+    mode = str(mode).lower()
+    if mode not in {"uniform", "quantile"}:
+        raise ValueError("calibration_mode must be either 'uniform' or 'quantile'")
+
+    y_true_arr = np.asarray(y_true, dtype=int).reshape(-1)
+    y_score_arr = np.asarray(y_score, dtype=float).reshape(-1)
+    n = min(y_true_arr.size, y_score_arr.size)
+    if n == 0:
+        return {
+            "ece": float("nan"),
+            "mce": float("nan"),
+            "nll": float("nan"),
+            "brier": float("nan"),
+        }
+
+    y_true_arr = y_true_arr[:n]
+    y_score_arr = np.clip(y_score_arr[:n], 1e-7, 1.0 - 1e-7)
+
+    try:
+        ece = float(ECE(y_score_arr, y_true_arr, n_bins=int(n_bins), mode=mode))
+    except Exception:
+        ece = float("nan")
+    try:
+        mce = float(MCE(y_score_arr, y_true_arr, n_bins=int(n_bins), mode=mode))
+    except Exception:
+        mce = float("nan")
+    try:
+        nll = float(negative_log_likelihood(y_score_arr.astype(np.float64), y_true_arr.astype(np.float64)))
+    except Exception:
+        nll = float("nan")
+    try:
+        brier = float(brier_score(y_score_arr, y_true_arr))
+    except Exception:
+        brier = float("nan")
+
+    return {
+        "ece": ece,
+        "mce": mce,
+        "nll": nll,
+        "brier": brier,
+    }
+
+
 def compute_video_classification_metrics_no_theta_filter(
     results_video: Dict[str, Dict],
     *,
@@ -976,6 +1028,8 @@ def compute_video_classification_metrics_no_theta_filter(
     ma_window: int = 30,
     duration_s: float = 20.0,
     decision_threshold: float = 0.5,
+    calibration_n_bins: int = 10,
+    calibration_mode: str = "uniform",
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """
     Compute hard classification metrics without theta_2/theta_3 sample filtering.
@@ -985,6 +1039,10 @@ def compute_video_classification_metrics_no_theta_filter(
     """
     if not (0.0 <= float(decision_threshold) <= 1.0):
         raise ValueError("decision_threshold must be in [0, 1]")
+    if int(calibration_n_bins) < 2:
+        raise ValueError("calibration_n_bins must be >= 2")
+    if str(calibration_mode).lower() not in {"uniform", "quantile"}:
+        raise ValueError("calibration_mode must be either 'uniform' or 'quantile'")
     if not results_video:
         return pd.DataFrame(), {
             "n_videos_total": 0.0,
@@ -995,6 +1053,9 @@ def compute_video_classification_metrics_no_theta_filter(
             "f1": float("nan"),
             "roc_auc": float("nan"),
             "pr_auc": float("nan"),
+            "ece": float("nan"),
+            "mce": float("nan"),
+            "nll": float("nan"),
             "brier": float("nan"),
             "log_loss": float("nan"),
             "avg_probability": float("nan"),
@@ -1036,6 +1097,9 @@ def compute_video_classification_metrics_no_theta_filter(
             "f1": float("nan"),
             "roc_auc": float("nan"),
             "pr_auc": float("nan"),
+            "ece": float("nan"),
+            "mce": float("nan"),
+            "nll": float("nan"),
             "brier": float("nan"),
             "log_loss": float("nan"),
             "avg_probability": float("nan"),
@@ -1046,6 +1110,12 @@ def compute_video_classification_metrics_no_theta_filter(
     y_pred = pd.to_numeric(valid_df["pred_label"], errors="coerce").to_numpy(dtype=int)
     y_score_raw = pd.to_numeric(valid_df["p_summary"], errors="coerce").to_numpy(dtype=float)
     y_score = np.clip(y_score_raw, 1e-7, 1.0 - 1e-7)
+    calib = _safe_calibration_metrics(
+        y_true,
+        y_score,
+        n_bins=int(calibration_n_bins),
+        mode=str(calibration_mode).lower(),
+    )
 
     summary = {
         "n_videos_total": float(len(per_video_df)),
@@ -1056,7 +1126,10 @@ def compute_video_classification_metrics_no_theta_filter(
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
         "roc_auc": _safe_roc_auc(y_true, y_score),
         "pr_auc": _safe_pr_auc(y_true, y_score),
-        "brier": float(brier_score_loss(y_true, y_score)),
+        "ece": calib["ece"],
+        "mce": calib["mce"],
+        "nll": calib["nll"],
+        "brier": calib["brier"],
         "log_loss": float(log_loss(y_true, y_score, labels=[0, 1])),
         "avg_probability": float(np.mean(y_score)),
     }
@@ -1071,6 +1144,8 @@ def compute_combined_theta_video_classification_metrics(
     ma_window: int = 30,
     duration_s: float = 20.0,
     min_kept_samples: int = 1,
+    calibration_n_bins: int = 10,
+    calibration_mode: str = "quantile",
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """
     Compute pain-sign classification metrics with combined thresholds (theta_1, theta_2, theta_3).
@@ -1088,6 +1163,10 @@ def compute_combined_theta_video_classification_metrics(
     """
     if min_kept_samples < 1:
         raise ValueError("min_kept_samples must be >= 1")
+    if int(calibration_n_bins) < 2:
+        raise ValueError("calibration_n_bins must be >= 2")
+    if str(calibration_mode).lower() not in {"uniform", "quantile"}:
+        raise ValueError("calibration_mode must be either 'uniform' or 'quantile'")
     if not results_video:
         return pd.DataFrame(), {
             "n_videos_total": 0.0,
@@ -1097,6 +1176,13 @@ def compute_combined_theta_video_classification_metrics(
             "precision": float("nan"),
             "recall": float("nan"),
             "f1": float("nan"),
+            "roc_auc": float("nan"),
+            "pr_auc": float("nan"),
+            "ece": float("nan"),
+            "mce": float("nan"),
+            "nll": float("nan"),
+            "brier": float("nan"),
+            "log_loss": float("nan"),
             "avg_removed_samples": float("nan"),
             "avg_removed_ratio": float("nan"),
             "avg_kept_samples": float("nan"),
@@ -1164,13 +1250,33 @@ def compute_combined_theta_video_classification_metrics(
         prec = float("nan")
         rec = float("nan")
         f1 = float("nan")
+        roc_auc = float("nan")
+        pr_auc = float("nan")
+        logloss = float("nan")
+        calib = {
+            "ece": float("nan"),
+            "mce": float("nan"),
+            "nll": float("nan"),
+            "brier": float("nan"),
+        }
     else:
         y_true = pd.to_numeric(valid_df["true_label"], errors="coerce").to_numpy(dtype=int)
         y_pred = pd.to_numeric(valid_df["pred_label_filtered"], errors="coerce").to_numpy(dtype=int)
+        y_score_raw = pd.to_numeric(valid_df["p_summary_filtered"], errors="coerce").to_numpy(dtype=float)
+        y_score = np.clip(y_score_raw, 1e-7, 1.0 - 1e-7)
         acc = float(accuracy_score(y_true, y_pred))
         prec = float(precision_score(y_true, y_pred, zero_division=0))
         rec = float(recall_score(y_true, y_pred, zero_division=0))
         f1 = float(f1_score(y_true, y_pred, zero_division=0))
+        roc_auc = _safe_roc_auc(y_true, y_score)
+        pr_auc = _safe_pr_auc(y_true, y_score)
+        logloss = float(log_loss(y_true, y_score, labels=[0, 1]))
+        calib = _safe_calibration_metrics(
+            y_true,
+            y_score,
+            n_bins=int(calibration_n_bins),
+            mode=str(calibration_mode).lower(),
+        )
 
     summary = {
         "n_videos_total": n_videos_total,
@@ -1180,6 +1286,13 @@ def compute_combined_theta_video_classification_metrics(
         "precision": prec,
         "recall": rec,
         "f1": f1,
+        "roc_auc": roc_auc,
+        "pr_auc": pr_auc,
+        "ece": calib["ece"],
+        "mce": calib["mce"],
+        "nll": calib["nll"],
+        "brier": calib["brier"],
+        "log_loss": logloss,
         "avg_removed_samples": float(pd.to_numeric(per_video_df["removed_samples"], errors="coerce").mean()),
         "avg_removed_ratio": float(pd.to_numeric(per_video_df["removed_ratio"], errors="coerce").mean()),
         "avg_kept_samples": float(pd.to_numeric(per_video_df["kept_samples"], errors="coerce").mean()),
