@@ -814,6 +814,119 @@ def compute_pain_sign_metrics(
     }
 
 
+def compute_theta_limit_time_percentages(
+    ps: PainSignResult,
+    thresholds: PainSignThresholds,
+    *,
+    hysteresis: float = 0.05,
+) -> Dict[str, float]:
+    """
+    Compute per-video timing percentages for theta limits.
+
+    - theta_2_in_limit: p_hat <= theta_2_low OR p_hat >= theta_2_high
+    - theta_3_in_limit: sigma_hat <= theta_3 (NaN if sigma is unavailable)
+    """
+    metrics = compute_pain_sign_metrics(
+        ps,
+        thresholds,
+        true_label=None,
+        hysteresis=hysteresis,
+    )
+
+    total_time_s = float(metrics.get("total_time_s", float("nan")))
+    if not np.isfinite(total_time_s) or total_time_s <= 0:
+        return {
+            "theta_2_in_limit_time_s": float("nan"),
+            "theta_2_in_limit_pct": float("nan"),
+            "theta_3_in_limit_time_s": float("nan"),
+            "theta_3_in_limit_pct": float("nan"),
+        }
+
+    theta_2_in_limit_time_s = float(metrics.get("precision_no_pain_time_s", 0.0)) + float(
+        metrics.get("precision_pain_time_s", 0.0)
+    )
+    theta_2_in_limit_time_s = float(np.clip(theta_2_in_limit_time_s, 0.0, total_time_s))
+    theta_2_in_limit_pct = float(theta_2_in_limit_time_s / total_time_s)
+
+    has_sigma = ps.sigma_hat is not None and np.asarray(ps.sigma_hat, dtype=float).size > 0
+    if has_sigma:
+        uncertainty_time_s = float(metrics.get("uncertainty_time_s", 0.0))
+        theta_3_in_limit_time_s = float(np.clip(total_time_s - uncertainty_time_s, 0.0, total_time_s))
+        theta_3_in_limit_pct = float(theta_3_in_limit_time_s / total_time_s)
+    else:
+        theta_3_in_limit_time_s = float("nan")
+        theta_3_in_limit_pct = float("nan")
+
+    return {
+        "theta_2_in_limit_time_s": theta_2_in_limit_time_s,
+        "theta_2_in_limit_pct": theta_2_in_limit_pct,
+        "theta_3_in_limit_time_s": theta_3_in_limit_time_s,
+        "theta_3_in_limit_pct": theta_3_in_limit_pct,
+    }
+
+
+def compute_theta_limit_percentages_per_video(
+    results_video: Dict[str, Dict],
+    *,
+    model_name: str,
+    mcdp: bool,
+    ma_window: int = 30,
+    duration_s: float = 20.0,
+    hysteresis: float = 0.05,
+) -> pd.DataFrame:
+    """
+    Compute theta-limit timing percentages per video for one model.
+
+    Returns a DataFrame indexed by video with:
+    - theta_2_in_limit_time_s
+    - theta_2_in_limit_pct
+    - theta_3_in_limit_time_s
+    - theta_3_in_limit_pct
+    """
+    columns = [
+        "theta_2_in_limit_time_s",
+        "theta_2_in_limit_pct",
+        "theta_3_in_limit_time_s",
+        "theta_3_in_limit_pct",
+    ]
+    if not results_video:
+        empty = pd.DataFrame(columns=columns)
+        empty.index.name = "video"
+        return empty
+
+    thresholds = get_thresholds_for_model(model_name)
+    rows: List[Dict[str, Union[str, float]]] = []
+
+    for video_name in sorted(results_video.keys()):
+        row: Dict[str, Union[str, float]] = {
+            "video": video_name,
+            "theta_2_in_limit_time_s": float("nan"),
+            "theta_2_in_limit_pct": float("nan"),
+            "theta_3_in_limit_time_s": float("nan"),
+            "theta_3_in_limit_pct": float("nan"),
+        }
+        try:
+            ps = compute_pain_sign(
+                results_video[video_name],
+                mcdp=mcdp,
+                theta_1=thresholds.theta_1,
+                ma_window=ma_window,
+                duration_s=duration_s,
+            )
+            row.update(
+                compute_theta_limit_time_percentages(
+                    ps,
+                    thresholds,
+                    hysteresis=hysteresis,
+                )
+            )
+        except Exception:
+            pass
+        rows.append(row)
+
+    return pd.DataFrame(rows).set_index("video")
+
+
 def _combined_theta_keep_mask(
     p_hat: np.ndarray,
     sigma_hat: Optional[np.ndarray],
