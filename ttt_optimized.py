@@ -114,6 +114,40 @@ REGION_COLOR_MAP = {
     "outside": "#17becf",
 }
 
+MODEL_CURVE_COLOR_MAP = {
+    "ncnn": "#1f77b4",     # blue
+    "vggface": "#ff7f0e",  # orange
+    "vit": "#2ca02c",      # green
+}
+
+REGION_LABEL_PTBR = {
+    "eyes": "olhos",
+    "eyebrowns": "sobrancelhas",
+    "cheeks": "bochechas",
+    "nose": "nariz",
+    "mouth": "boca",
+    "chin": "queixo",
+    "forehead": "testa",
+    "between_eyes": "entre os olhos",
+    "nasolabial_folds": "sulcos nasolabiais",
+    "outside": "fora do rosto",
+}
+
+
+def _region_label_to_ptbr(name: str) -> str:
+    return REGION_LABEL_PTBR.get(name, str(name).replace("_", " "))
+
+
+def _resolve_model_curve_color(model_name: str, fallback: Optional[str] = None) -> str:
+    name = str(model_name).lower()
+    if "ncnn" in name:
+        return MODEL_CURVE_COLOR_MAP["ncnn"]
+    if "vggface" in name:
+        return MODEL_CURVE_COLOR_MAP["vggface"]
+    if "vit" in name:
+        return MODEL_CURVE_COLOR_MAP["vit"]
+    return fallback if fallback is not None else "#1f77b4"
+
 PathLike = Union[str, Path]
 
 # ---------------------------------------------------------------------
@@ -2191,12 +2225,14 @@ def plot_pain_sign(
     derivative_min_samples: int = 5,
     style: PlotStyle = PlotStyle(),
 ) -> None:
-    """Clinical plot with probability, derivatives, region curves, and frame/XAI strip."""
-    time = ps.time_s
-    p = ps.p_hat
-    metrics_hysteresis = 0.05
-    metrics = compute_pain_sign_metrics(ps, thresholds, true_label=true_label, hysteresis=metrics_hysteresis)
+    """Single-model layout aligned with plot_multi_model_pain_sign (no derivatives/metrics)."""
+    _ = derivative_corr_method, derivative_min_samples
 
+    if strip_img.ndim != 3:
+        raise ValueError(f"Expected strip image with 3 dims, got shape {strip_img.shape}")
+
+    time = ps.time_s
+    t_max = float(time.max()) if time.size else 1.0
     region_curves = _prepare_region_curves(
         region_df,
         region_selection=region_selection,
@@ -2206,119 +2242,100 @@ def plot_pain_sign(
     )
     has_regions = region_curves is not None
 
-    p_derivative = compute_time_derivative(time, p)
-    region_derivative: Dict[str, np.ndarray] = {}
-    region_derivative_corr: Dict[str, float] = {}
-    if has_regions and region_curves is not None:
-        for idx, region in enumerate(region_curves.labels):
-            region_interp = _interp_to_time(region_curves.time_s, region_curves.data[:, idx], time)
-            dr_dt = compute_time_derivative(time, region_interp)
-            region_derivative[region] = dr_dt
-            region_derivative_corr[region] = _safe_corr(
-                p_derivative,
-                dr_dt,
-                method=derivative_corr_method,
-                min_samples=derivative_min_samples,
-            )
-
-    if has_regions:
-        fig = plt.figure(figsize=(16, 10.5))
-        gs = GridSpec(nrows=4, ncols=1, height_ratios=[2.8, 1.6, 1.8, 2.0], hspace=0.12)
+    total_h = int(strip_img.shape[0])
+    if total_h % 3 == 0:
+        row_count = 3
+    elif total_h % 2 == 0:
+        row_count = 2
     else:
-        fig = plt.figure(figsize=(16, 8.7))
-        gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.0, 1.6, 2.0], hspace=0.12)
+        row_count = 1
 
-    ax = fig.add_subplot(gs[0])
+    row_edges = np.linspace(0, total_h, row_count + 1, dtype=int)
+    strip_rows = [strip_img[row_edges[i] : row_edges[i + 1], :, :] for i in range(row_count)]
 
-    _add_background_bands(ax, thresholds, style)
+    display_name = _format_model_name_for_plot(model_name)
+    row_labels = ["Quadros"]
+    if row_count >= 2:
+        row_labels.append(display_name)
+    if row_count >= 3:
+        row_labels.append("Regioes da malha")
 
-    ax.plot(time, p, color=style.signal_color, lw=2.4, solid_capstyle="round")
+    height_ratios: List[float] = [3.2]
+    if has_regions:
+        height_ratios.append(1.6)
+    height_ratios.extend([0.8] * row_count)
 
-    _add_threshold_lines(ax, time, thresholds, style)
-
-    idx_cross = theta_crossings(p, thresholds.theta_1)
-    if idx_cross.size:
-        ax.scatter(time[idx_cross], np.full(idx_cross.shape, thresholds.theta_1), s=40, color=style.uncertain_color, zorder=5, label="Cruzamentos de decisao")
-
-    _format_prob_axis(ax, time, style, has_regions=True)
-
-    label_txt = "Dor" if true_label == 1 else "Sem dor"
-    pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
-    reliability_parts = _build_reliability_parts(ps, thresholds, pred_txt, idx_cross)
-
-    ax.set_title(
-        f"{video_name} | Modelo: {model_name} | Real: {label_txt} | " + " | ".join(reliability_parts),
-        fontsize=style.title_size,
-        pad=10,
+    fig_h = max(7.0, 4.8 + 1.1 * row_count + (1.2 if has_regions else 0.0))
+    fig = plt.figure(figsize=(18.5, fig_h))
+    gs = GridSpec(
+        nrows=len(height_ratios),
+        ncols=1,
+        height_ratios=height_ratios,
+        hspace=0.03 if has_regions else 0.02,
     )
 
-    metrics_text = _format_metrics_summary(metrics, hysteresis=metrics_hysteresis)
-    _add_metrics_summary_box(ax, metrics_text, style)
+    ax = fig.add_subplot(gs[0])
+    label_txt = "Dor" if true_label == 1 else "Sem dor"
+    ax.set_title(f"Classe real = {label_txt}", fontsize=style.title_size, y=1.07)
 
-    handles = [
-        plt.Line2D([0], [0], color=style.signal_color, lw=2.4, label="Probabilidade de dor"),
-    ]
-    ax.legend(handles=handles, loc="upper left", frameon=True, framealpha=0.9)
-
-    axd = fig.add_subplot(gs[1], sharex=ax)
-    axd.axhline(0.0, color=style.grid_color, lw=1.2, linestyle=":")
-    axd.plot(time, p_derivative, color=style.signal_color, lw=2.2, label=r"$dP/dt$")
-
-    if has_regions and region_curves is not None:
-        default_colors = plt.cm.get_cmap("tab20", len(region_curves.labels))
-        for idx, region in enumerate(region_curves.labels):
-            color = REGION_COLOR_MAP.get(region, default_colors(idx))
-            corr = region_derivative_corr.get(region, np.nan)
-            corr_txt = "n/a" if np.isnan(corr) else f"{corr:+.2f}"
-            axd.plot(
-                time,
-                region_derivative[region],
-                color=color,
-                lw=1.3,
-                alpha=0.82,
-                label=f"d({region})/dt | r={corr_txt}",
-            )
-
-    deriv_series = [p_derivative] + list(region_derivative.values())
-    deriv_series = [arr for arr in deriv_series if arr.size]
-    if deriv_series:
-        all_vals = np.concatenate(deriv_series)
-        all_vals = all_vals[np.isfinite(all_vals)]
-        if all_vals.size:
-            lim = float(np.percentile(np.abs(all_vals), 98))
-            lim = max(lim, 1e-4)
-            axd.set_ylim(-1.1 * lim, 1.1 * lim)
-
-    axd.set_ylabel("d/dt", fontsize=style.label_size)
-    axd.set_xlabel("")
-    axd.tick_params(axis="both", labelsize=style.tick_size)
-    axd.tick_params(labelbottom=False)
-    axd.grid(True, axis="y", alpha=0.18, color=style.grid_color)
-    axd.grid(False, axis="x")
-    if time.size:
-        axd.set_xlim(time.min(), time.max())
-
-    if has_regions and region_derivative:
-        n_items = 1 + len(region_derivative)
-        if n_items <= 5:
-            ncol = 1
-        elif n_items <= 10:
-            ncol = 2
-        else:
-            ncol = 3
-        axd.legend(
-            loc="upper left",
-            frameon=True,
-            framealpha=0.9,
-            fontsize=max(7, style.tick_size - 3),
-            ncol=ncol,
-        )
+    pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
+    idx_cross = theta_crossings(ps.p_hat, thresholds.theta_1)
+    sign_type = classify_pain_sign_type(
+        ps,
+        theta_1=thresholds.theta_1,
+        theta_3=thresholds.theta_3,
+        sign_kmeans_model=None,
+    )
+    sign_type_ptbr = _sign_type_to_ptbr(sign_type)
+    if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
+        sigma_txt = "n/a"
+        unc_state = "n/a"
     else:
-        axd.legend(loc="upper left", frameon=True, framealpha=0.9)
+        sigma_txt = f"{ps.sigma_summary:.2f}"
+        unc_state = "Confiável" if float(ps.sigma_summary) <= float(thresholds.theta_3) else "Incerto"
 
+    line_label = (
+        f"{display_name} | {pred_txt} ($\\hat{{p}}$={ps.p_summary:.2f}) | "
+        #f"{sign_type_ptbr} | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
+        f"Irregular | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
+    )
+    model_color = _resolve_model_curve_color(model_name, fallback=style.signal_color)
+    ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=model_color, label=line_label)
+    ax.axhline(thresholds.theta_1, linestyle="--", lw=1.0, color=model_color, alpha=0.35)
+    if idx_cross.size and ps.p_hat.size:
+        cross_idx = np.clip(idx_cross, 0, ps.p_hat.size - 1)
+        ax.scatter(
+            ps.time_s[cross_idx],
+            ps.p_hat[cross_idx],
+            s=28,
+            marker="o",
+            facecolor=model_color,
+            linewidths=0.7,
+            zorder=6,
+        )
+
+    ax.set_xlim(0.0, t_max)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
+    ax.tick_params(axis="both", labelsize=style.tick_size)
+    ax.tick_params(labelbottom=False)
+    ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
+    ax.grid(False, axis="x")
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.10),
+        ncol=1,
+        frameon=False,
+        fontsize=style.tick_size,
+    )
+
+    strip_start_idx = 1
     if has_regions and region_curves is not None:
-        axr = fig.add_subplot(gs[2], sharex=ax)
-        region_dict = {region: region_curves.data[:, idx] for idx, region in enumerate(region_curves.labels)}
+        ax_regions = fig.add_subplot(gs[1], sharex=ax)
+        region_dict = {
+            _region_label_to_ptbr(region): region_curves.data[:, idx]
+            for idx, region in enumerate(region_curves.labels)
+        }
         default_colors = plt.cm.get_cmap("tab20", len(region_curves.labels))
         region_colors = [REGION_COLOR_MAP.get(region, default_colors(idx)) for idx, region in enumerate(region_curves.labels)]
         plot_region_importance_stack(
@@ -2327,33 +2344,46 @@ def plot_pain_sign(
             smooth_window=0,
             top_k=None,
             title="",
-            ax=axr,
+            ax=ax_regions,
             colors=region_colors,
             show=False,
-            legend_kwargs={"fontsize": 9},
+            legend_kwargs={"fontsize": max(8, style.tick_size - 1), "ncol": 2, "frameon": True},
         )
-        axr.set_ylabel("Importância relativa", fontsize=style.label_size)
-        axr.set_xlabel("Tempo (s)", fontsize=style.label_size)
-        axr.tick_params(axis="both", labelsize=style.tick_size)
-        axr.grid(True, axis="y", alpha=0.18, color=style.grid_color)
-        axr.set_ylim(0, 1)
+        ax_regions.set_ylabel("Importancia relativa", fontsize=style.label_size)
+        ax_regions.set_xlabel("")
+        ax_regions.tick_params(axis="both", labelsize=style.tick_size)
+        ax_regions.tick_params(labelbottom=False)
+        ax_regions.grid(True, axis="y", alpha=0.18, color=style.grid_color)
+        ax_regions.grid(False, axis="x")
+        ax_regions.set_ylim(0, 1)
         if time.size:
-            axr.set_xlim(time.min(), time.max())
-        ax_strip = fig.add_subplot(gs[3])
-    else:
-        ax_strip = fig.add_subplot(gs[2])
+            ax_regions.set_xlim(0.0, t_max)
+        strip_start_idx = 2
 
-    ax_strip.imshow(strip_img)
-    ax_strip.axis("off")
-
-    row_count = 3 if (strip_img.shape[0] % 3 == 0) else 2
-    _label_strip_rows(ax_strip, row_count, style)
+    last_row_idx = strip_start_idx + row_count - 1
+    for offset, row_img in enumerate(strip_rows):
+        row_idx = strip_start_idx + offset
+        ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
+        ax_row.imshow(
+            row_img,
+            aspect=_strip_aspect_for_square_pixels(row_img, t_max),
+            extent=[0.0, t_max, 0.0, 1.0],
+        )
+        ax_row.set_yticks([])
+        if offset < len(row_labels):
+            ax_row.set_ylabel(row_labels[offset], fontsize=max(8, style.tick_size - 1))
+        ax_row.tick_params(axis="x", labelsize=style.tick_size)
+        if row_idx < last_row_idx:
+            ax_row.tick_params(labelbottom=False)
+        else:
+            ax_row.set_xlabel("Tempo [s]", fontsize=style.label_size)
+        for spine in ax_row.spines.values():
+            spine.set_visible(False)
 
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-
 
 def _extract_overlay_row(strip_img: np.ndarray, out_size: Tuple[int, int]) -> np.ndarray:
     """Extract only the XAI-overlay row from a strip returned by load_video_strip()."""
@@ -2437,7 +2467,8 @@ def plot_multi_model_pain_sign(
             raise KeyError(f"Video '{video_name}' nao foi encontrado nos resultados do modelo '{model_name}'")
 
         if model_name not in colors:
-            colors[model_name] = default_palette[idx % len(default_palette)]
+            fallback_color = default_palette[idx % len(default_palette)]
+            colors[model_name] = _resolve_model_curve_color(model_name, fallback=fallback_color)
 
         thresholds = get_thresholds_for_model(model_name)
         thresholds_by_model[model_name] = thresholds
