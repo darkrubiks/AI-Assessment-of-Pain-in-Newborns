@@ -3,6 +3,7 @@ from __future__ import annotations
 import gc
 import pickle
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
@@ -133,6 +134,10 @@ REGION_LABEL_PTBR = {
     "outside": "fora do rosto",
 }
 
+AVERAGE_FACE_BG_FILENAME = "avg_aligned_nopain.png"
+AVERAGE_FACE_KEYPOINTS_FILENAME = "mean_face.pkl"
+AVERAGE_FACE_ROW_LABEL = "Face media"
+
 
 def _region_label_to_ptbr(name: str) -> str:
     return REGION_LABEL_PTBR.get(name, str(name).replace("_", " "))
@@ -147,6 +152,235 @@ def _resolve_model_curve_color(model_name: str, fallback: Optional[str] = None) 
     if "vit" in name:
         return MODEL_CURVE_COLOR_MAP["vit"]
     return fallback if fallback is not None else "#1f77b4"
+
+
+@dataclass(frozen=True)
+class AverageFaceAssets:
+    background_rgb: np.ndarray
+    region_masks: Dict[str, np.ndarray]
+
+
+def _default_average_face_paths() -> Tuple[Path, Path]:
+    base_dir = Path(__file__).resolve().parent.parent
+    return base_dir / AVERAGE_FACE_BG_FILENAME, base_dir / AVERAGE_FACE_KEYPOINTS_FILENAME
+
+
+@lru_cache(maxsize=8)
+def _load_average_face_assets_cached(background_path: str, keypoints_path: str) -> AverageFaceAssets:
+    bg_path = Path(background_path)
+    kp_path = Path(keypoints_path)
+    if not bg_path.exists():
+        raise FileNotFoundError(f"Imagem media nao encontrada: {bg_path}")
+    if not kp_path.exists():
+        raise FileNotFoundError(f"Keypoints da face media nao encontrados: {kp_path}")
+
+    bg_bgr = cv2.imread(str(bg_path))
+    if bg_bgr is None:
+        raise ValueError(f"Nao foi possivel ler a imagem media: {bg_path}")
+    background_rgb = cv2.cvtColor(bg_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+
+    with kp_path.open("rb") as f:
+        keypoints = np.asarray(pickle.load(f), dtype=np.float32)
+    if keypoints.ndim != 2 or keypoints.shape[1] != 2 or keypoints.shape[0] < 106:
+        raise ValueError(
+            f"Keypoints invalidos em {kp_path}: esperado array [106, 2], recebido {keypoints.shape}"
+        )
+
+    region_masks = merge_symmetric_masks(create_face_regions_masks(keypoints[:106]))
+    ref_mask = next(iter(region_masks.values()))
+    mask_h, mask_w = ref_mask.shape[:2]
+    if background_rgb.shape[:2] != (mask_h, mask_w):
+        background_rgb = cv2.resize(background_rgb, (mask_w, mask_h), interpolation=cv2.INTER_AREA)
+
+    return AverageFaceAssets(background_rgb=background_rgb, region_masks=region_masks)
+
+
+def _load_average_face_assets(
+    background_path: Optional[PathLike] = None,
+    keypoints_path: Optional[PathLike] = None,
+) -> AverageFaceAssets:
+    default_bg_path, default_kp_path = _default_average_face_paths()
+    bg_path = Path(background_path) if background_path is not None else default_bg_path
+    kp_path = Path(keypoints_path) if keypoints_path is not None else default_kp_path
+    return _load_average_face_assets_cached(str(bg_path.resolve()), str(kp_path.resolve()))
+
+
+def _region_columns_from_df(region_df: Optional[pd.DataFrame]) -> List[str]:
+    if region_df is None or region_df.empty:
+        return []
+    return [c for c in region_df.columns if c not in ("frame", "frame_idx", "time_s")]
+
+
+def _region_time_axis_from_df(region_df: Optional[pd.DataFrame]) -> np.ndarray:
+    if region_df is None or region_df.empty:
+        return np.empty(0, dtype=float)
+    if "time_s" in region_df.columns:
+        return region_df["time_s"].to_numpy(dtype=float)
+    if "frame_idx" in region_df.columns:
+        return region_df["frame_idx"].to_numpy(dtype=float)
+    return np.arange(len(region_df), dtype=float)
+
+
+def _select_region_scores_for_time(region_df: Optional[pd.DataFrame], target_time_s: float) -> Optional[pd.Series]:
+    region_cols = _region_columns_from_df(region_df)
+    if region_df is None or region_df.empty or not region_cols:
+        return None
+
+    time_axis = _region_time_axis_from_df(region_df)
+    if time_axis.size == 0:
+        return region_df.iloc[-1][region_cols]
+
+    idx = int(np.argmin(np.abs(time_axis - float(target_time_s))))
+    return region_df.iloc[idx][region_cols]
+
+
+def _normalize_region_scores(region_scores: Dict[str, float], region_names: Iterable[str]) -> Dict[str, float]:
+    cleaned = {str(name): max(0.0, float(region_scores.get(name, 0.0))) for name in region_names}
+    max_score = max(cleaned.values(), default=0.0)
+    if max_score <= 0:
+        return {name: 0.0 for name in cleaned}
+    return {name: (score / max_score) for name, score in cleaned.items()}
+
+
+def _render_average_face_importance(
+    region_scores: Union[pd.Series, Dict[str, float]],
+    *,
+    out_size: Tuple[int, int] = (256, 256),
+    background_path: Optional[PathLike] = None,
+    keypoints_path: Optional[PathLike] = None,
+    min_alpha: float = 0.06,
+    max_alpha: float = 0.50,
+    blur_kernel: int = 13,
+    feather_ratio: float = 0.045,
+    intensity_gamma: float = 1.35,
+) -> np.ndarray:
+    assets = _load_average_face_assets(background_path=background_path, keypoints_path=keypoints_path)
+    if isinstance(region_scores, pd.Series):
+        raw_scores = {str(k): float(v) for k, v in region_scores.items() if pd.notna(v)}
+    else:
+        raw_scores = {str(k): float(v) for k, v in dict(region_scores).items() if pd.notna(v)}
+
+    normalized_scores = _normalize_region_scores(raw_scores, assets.region_masks.keys())
+    output = assets.background_rgb.copy()
+    heat_strength = np.zeros(output.shape[:2], dtype=np.float32)
+    max_dim = float(max(output.shape[:2]))
+    feather_px = max(6.0, float(feather_ratio) * max_dim)
+
+    for region_name, importance in normalized_scores.items():
+        if importance <= 0:
+            continue
+        mask = assets.region_masks.get(region_name)
+        if mask is None:
+            continue
+        binary_mask = (mask > 0).astype(np.uint8)
+        if not np.any(binary_mask):
+            continue
+
+        # Build a soft signed-distance field so region boundaries fade smoothly
+        # instead of appearing as hard polygon edges.
+        dist_in = cv2.distanceTransform(binary_mask, cv2.DIST_L2, 5)
+        dist_out = cv2.distanceTransform(1 - binary_mask, cv2.DIST_L2, 5)
+        signed = (dist_in - dist_out) / feather_px
+        soft_mask = 1.0 / (1.0 + np.exp(-signed))
+        heat_strength += soft_mask.astype(np.float32) * float(importance)
+
+    blur_kernel = max(1, int(blur_kernel))
+    if blur_kernel % 2 == 0:
+        blur_kernel += 1
+    if blur_kernel > 1:
+        heat_strength = cv2.GaussianBlur(heat_strength, (blur_kernel, blur_kernel), 0)
+
+    peak = float(np.nanmax(heat_strength)) if heat_strength.size else 0.0
+    if peak > 0:
+        heat_strength = np.clip(heat_strength / peak, 0.0, 1.0)
+        heat_strength = np.power(heat_strength, float(max(1e-6, intensity_gamma)))
+
+    alpha_map = np.where(
+        heat_strength > 0,
+        min_alpha + (max_alpha - min_alpha) * heat_strength,
+        0.0,
+    ).astype(np.float32)
+    heat_rgb = cmap(np.clip(heat_strength, 0.0, 1.0))[..., :3].astype(np.float32)
+    output = output * (1.0 - alpha_map[..., None]) + heat_rgb * alpha_map[..., None]
+
+    if out_size is not None:
+        output = cv2.resize(output, out_size, interpolation=cv2.INTER_AREA)
+    return np.clip(output, 0.0, 1.0)
+
+
+def _infer_strip_row_count(strip_img: np.ndarray) -> int:
+    total_h = int(strip_img.shape[0])
+    if total_h % 3 == 0:
+        return 3
+    if total_h % 2 == 0:
+        return 2
+    return 1
+
+
+def _infer_strip_out_size(strip_img: np.ndarray) -> Tuple[int, int]:
+    row_count = _infer_strip_row_count(strip_img)
+    row_h = max(1, int(strip_img.shape[0] // row_count))
+    return (row_h, row_h)
+
+
+def _build_average_face_strip_row(
+    region_df: Optional[pd.DataFrame],
+    *,
+    num_tiles: int,
+    out_size: Tuple[int, int],
+    background_path: Optional[PathLike] = None,
+    keypoints_path: Optional[PathLike] = None,
+) -> Optional[np.ndarray]:
+    if region_df is None or region_df.empty or num_tiles <= 0:
+        return None
+
+    time_axis = _region_time_axis_from_df(region_df)
+    region_cols = _region_columns_from_df(region_df)
+    if time_axis.size == 0 or not region_cols:
+        return None
+
+    if num_tiles == 1:
+        sample_times = np.array([time_axis[-1]], dtype=float)
+    else:
+        sample_times = np.linspace(float(time_axis[0]), float(time_axis[-1]), int(num_tiles))
+
+    tiles: List[np.ndarray] = []
+    for sample_time in sample_times:
+        scores = _select_region_scores_for_time(region_df, float(sample_time))
+        if scores is None:
+            continue
+        tiles.append(
+            _render_average_face_importance(
+                scores,
+                out_size=out_size,
+                background_path=background_path,
+                keypoints_path=keypoints_path,
+            )
+        )
+
+    if not tiles:
+        return None
+    return np.concatenate(tiles, axis=1)
+
+
+def _build_live_average_face_panel(
+    region_df: Optional[pd.DataFrame],
+    *,
+    reveal_until_s: float,
+    out_size: Tuple[int, int],
+    background_path: Optional[PathLike] = None,
+    keypoints_path: Optional[PathLike] = None,
+) -> Optional[np.ndarray]:
+    scores = _select_region_scores_for_time(region_df, reveal_until_s)
+    if scores is None:
+        return None
+    return _render_average_face_importance(
+        scores,
+        out_size=out_size,
+        background_path=background_path,
+        keypoints_path=keypoints_path,
+    )
+
 
 PathLike = Union[str, Path]
 
@@ -2208,10 +2442,308 @@ def plot_region_importance_stack(
     return ax
 
 
+def _mask_strip_row_to_time(
+    row_img: np.ndarray,
+    reveal_until_s: Optional[float],
+    t_max: float,
+    fill_value: float = 1.0,
+) -> np.ndarray:
+    row = np.asarray(row_img, dtype=np.float32)
+    if reveal_until_s is None or row.size == 0 or t_max <= 0:
+        return row.copy()
+
+    reveal_until_s = float(np.clip(reveal_until_s, 0.0, t_max))
+    visible_cols = int(np.ceil((reveal_until_s / t_max) * row.shape[1]))
+    visible_cols = int(np.clip(visible_cols, 0, row.shape[1]))
+
+    masked = np.full_like(row, fill_value, dtype=np.float32)
+    if visible_cols > 0:
+        masked[:, :visible_cols, :] = row[:, :visible_cols, :]
+    return masked
+
+
+def _resolve_clip_frame_index(reveal_until_s: float, t_max: float, num_frames: int) -> int:
+    if num_frames <= 1 or t_max <= 0:
+        return 0
+    fraction = float(np.clip(reveal_until_s / t_max, 0.0, 1.0))
+    return int(np.clip(round(fraction * (num_frames - 1)), 0, num_frames - 1))
+
+
+def _load_clip_visual_pair(
+    *,
+    img_files: List[Path],
+    merged_masks_dir: Path,
+    reveal_until_s: float,
+    t_max: float,
+    out_size: Tuple[int, int],
+    xai_alpha: float,
+) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    if not img_files:
+        return None, None
+
+    frame_idx = _resolve_clip_frame_index(reveal_until_s, t_max, len(img_files))
+    frame_path = img_files[frame_idx]
+    frame = _safe_read_rgb(frame_path, out_size)
+    mask_path = merged_masks_dir / f"{frame_path.stem}.npz"
+    mask = _safe_read_xai_mask(mask_path, out_size)
+    overlay = _blend_xai_overlay(frame, mask, xai_alpha)
+    return frame, overlay
+
+
+def _build_single_model_pain_sign_figure(
+    *,
+    video_name: str,
+    strip_img: Optional[np.ndarray],
+    ps: PainSignResult,
+    thresholds: PainSignThresholds,
+    true_label: int,
+    model_name: str,
+    region_df: Optional[pd.DataFrame] = None,
+    region_top_k: int = 0,
+    region_selection: str = "mean",
+    region_smooth_window: int = 30,
+    derivative_corr_method: str = "pearson",
+    derivative_min_samples: int = 5,
+    show_visual_rows: bool = True,
+    style: PlotStyle = PlotStyle(),
+    reveal_until_s: Optional[float] = None,
+    live_frame_img: Optional[np.ndarray] = None,
+    live_overlay_img: Optional[np.ndarray] = None,
+    live_average_face_img: Optional[np.ndarray] = None,
+    average_face_row_img: Optional[np.ndarray] = None,
+    figure_scale: float = 1.0,
+) -> matplotlib.figure.Figure:
+    """Build the single-model pain-sign figure, optionally revealing it up to a time cursor."""
+    _ = video_name, derivative_corr_method, derivative_min_samples
+
+    time = ps.time_s
+    t_max = float(time.max()) if time.size else 1.0
+    reveal_until_s = None if reveal_until_s is None else float(np.clip(reveal_until_s, 0.0, t_max))
+    time_eps = 1e-9
+    visible_mask = np.ones(time.shape, dtype=bool) if reveal_until_s is None else (time <= (reveal_until_s + time_eps))
+    use_live_visuals = show_visual_rows and live_frame_img is not None and live_overlay_img is not None
+    region_curves = _prepare_region_curves(
+        region_df,
+        region_selection=region_selection,
+        region_top_k=region_top_k,
+        region_smooth_window=region_smooth_window,
+        duration_s=float(time[-1]) if time.size else None,
+    )
+    has_regions = region_curves is not None
+
+    strip_rows: List[np.ndarray] = []
+    row_labels: List[str] = []
+    row_count = 0
+    display_name = _format_model_name_for_plot(model_name)
+    if show_visual_rows and not use_live_visuals:
+        if strip_img is None:
+            raise ValueError("strip_img is required when show_visual_rows=True")
+        if strip_img.ndim != 3:
+            raise ValueError(f"Expected strip image with 3 dims, got shape {strip_img.shape}")
+
+        row_count = _infer_strip_row_count(strip_img)
+
+        row_edges = np.linspace(0, int(strip_img.shape[0]), row_count + 1, dtype=int)
+        base_rows = [strip_img[row_edges[i] : row_edges[i + 1], :, :] for i in range(row_count)]
+        strip_rows = [
+            _mask_strip_row_to_time(row_img, reveal_until_s=reveal_until_s, t_max=t_max, fill_value=1.0)
+            for row_img in base_rows
+        ]
+
+        row_labels = ["Quadros"]
+        if row_count >= 2:
+            row_labels.append(display_name)
+        if row_count >= 3:
+            row_labels.append("Regioes da malha")
+        if average_face_row_img is not None:
+            strip_rows.append(
+                _mask_strip_row_to_time(average_face_row_img, reveal_until_s=reveal_until_s, t_max=t_max, fill_value=1.0)
+            )
+            row_labels.append(AVERAGE_FACE_ROW_LABEL)
+
+    height_ratios: List[float] = [3.2]
+    if has_regions:
+        height_ratios.append(1.6)
+    if use_live_visuals:
+        height_ratios.append(2.2)
+    elif show_visual_rows:
+        height_ratios.extend([0.8] * len(strip_rows))
+
+    fig_h = max(
+        5.2 if not show_visual_rows else 7.0,
+        4.8 + (2.0 if use_live_visuals else (1.1 * len(strip_rows))) + (1.2 if has_regions else 0.0),
+    )
+    figure_scale = float(max(0.25, figure_scale))
+    fig = plt.figure(figsize=(18.5 * figure_scale, fig_h * figure_scale))
+    gs = GridSpec(
+        nrows=len(height_ratios),
+        ncols=1,
+        height_ratios=height_ratios,
+        hspace=0.03 if has_regions else 0.02,
+    )
+
+    ax = fig.add_subplot(gs[0])
+    label_txt = "Dor" if true_label == 1 else "Sem dor"
+    ax.set_title(f"Classe real = {label_txt}", fontsize=style.title_size, y=1.07)
+
+    pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
+    idx_cross = theta_crossings(ps.p_hat, thresholds.theta_1)
+    sign_type = classify_pain_sign_type(
+        ps,
+        theta_1=thresholds.theta_1,
+        theta_3=thresholds.theta_3,
+        sign_kmeans_model=None,
+    )
+    _sign_type_ptbr = _sign_type_to_ptbr(sign_type)
+    if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
+        sigma_txt = "n/a"
+        unc_state = "n/a"
+    else:
+        sigma_txt = f"{ps.sigma_summary:.2f}"
+        unc_state = "Confiavel" if float(ps.sigma_summary) <= float(thresholds.theta_3) else "Incerto"
+
+    line_label = (
+        f"{display_name} | {pred_txt} ($\\hat{{p}}$={ps.p_summary:.2f}) | "
+        f"Irregular | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
+    )
+    model_color = _resolve_model_curve_color(model_name, fallback=style.signal_color)
+    ax.plot(ps.time_s[visible_mask], ps.p_hat[visible_mask], lw=2.3, color=model_color, label=line_label)
+    ax.axhline(thresholds.theta_1, linestyle="--", lw=1.0, color=model_color, alpha=0.35)
+    if idx_cross.size and ps.p_hat.size:
+        cross_idx = np.clip(idx_cross, 0, ps.p_hat.size - 1)
+        if reveal_until_s is not None:
+            cross_idx = cross_idx[ps.time_s[cross_idx] <= (reveal_until_s + time_eps)]
+        if cross_idx.size:
+            ax.scatter(
+                ps.time_s[cross_idx],
+                ps.p_hat[cross_idx],
+                s=28,
+                marker="o",
+                facecolor=model_color,
+                linewidths=0.7,
+                zorder=6,
+            )
+
+    if reveal_until_s is not None:
+        ax.axvline(reveal_until_s, linestyle=":", lw=1.4, color=style.grid_color, alpha=0.8, zorder=5)
+
+    ax.set_xlim(0.0, t_max)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
+    ax.tick_params(axis="both", labelsize=style.tick_size)
+    ax.tick_params(labelbottom=not (has_regions or show_visual_rows))
+    ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
+    ax.grid(False, axis="x")
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.10),
+        ncol=1,
+        frameon=False,
+        fontsize=style.tick_size,
+    )
+    if not (has_regions or show_visual_rows):
+        ax.set_xlabel("Tempo [s]", fontsize=style.label_size)
+
+    strip_start_idx = 1
+    if has_regions and region_curves is not None:
+        ax_regions = fig.add_subplot(gs[1], sharex=ax)
+        region_mask = (
+            np.ones(region_curves.time_s.shape, dtype=bool)
+            if reveal_until_s is None
+            else (region_curves.time_s <= (reveal_until_s + time_eps))
+        )
+        region_dict = {
+            _region_label_to_ptbr(region): region_curves.data[region_mask, idx]
+            for idx, region in enumerate(region_curves.labels)
+        }
+        default_colors = plt.cm.get_cmap("tab20", len(region_curves.labels))
+        region_colors = [REGION_COLOR_MAP.get(region, default_colors(idx)) for idx, region in enumerate(region_curves.labels)]
+        if region_mask.sum() >= 2:
+            plot_region_importance_stack(
+                region_curves.time_s[region_mask],
+                region_dict,
+                smooth_window=0,
+                top_k=None,
+                title="",
+                ax=ax_regions,
+                colors=region_colors,
+                show=False,
+                legend_kwargs={"fontsize": max(8, style.tick_size - 1), "ncol": 2, "frameon": True},
+            )
+        ax_regions.set_ylabel("Importancia relativa", fontsize=style.label_size)
+        ax_regions.set_xlabel("")
+        ax_regions.tick_params(axis="both", labelsize=style.tick_size)
+        ax_regions.tick_params(labelbottom=not show_visual_rows)
+        ax_regions.grid(True, axis="y", alpha=0.18, color=style.grid_color)
+        ax_regions.grid(False, axis="x")
+        ax_regions.set_ylim(0, 1)
+        if time.size:
+            ax_regions.set_xlim(0.0, t_max)
+        if reveal_until_s is not None:
+            ax_regions.axvline(reveal_until_s, linestyle=":", lw=1.4, color=style.grid_color, alpha=0.8, zorder=5)
+        if not show_visual_rows:
+            ax_regions.set_xlabel("Tempo [s]", fontsize=style.label_size)
+        strip_start_idx = 2
+
+    if use_live_visuals:
+        visual_row = strip_start_idx
+        n_visual_cols = 3 if live_average_face_img is not None else 2
+        visual_gs = gs[visual_row].subgridspec(1, n_visual_cols, wspace=0.02)
+        ax_video = fig.add_subplot(visual_gs[0, 0])
+        ax_video.imshow(np.clip(live_frame_img, 0.0, 1.0))
+        ax_video.set_title("Video", fontsize=style.label_size)
+        ax_video.set_xticks([])
+        ax_video.set_yticks([])
+        for spine in ax_video.spines.values():
+            spine.set_visible(False)
+
+        ax_overlay = fig.add_subplot(visual_gs[0, 1])
+        ax_overlay.imshow(np.clip(live_overlay_img, 0.0, 1.0))
+        ax_overlay.set_title("Video + XAI", fontsize=style.label_size)
+        ax_overlay.set_xticks([])
+        ax_overlay.set_yticks([])
+        for spine in ax_overlay.spines.values():
+            spine.set_visible(False)
+
+        if live_average_face_img is not None:
+            ax_avg = fig.add_subplot(visual_gs[0, 2])
+            ax_avg.imshow(np.clip(live_average_face_img, 0.0, 1.0))
+            ax_avg.set_title(AVERAGE_FACE_ROW_LABEL, fontsize=style.label_size)
+            ax_avg.set_xticks([])
+            ax_avg.set_yticks([])
+            for spine in ax_avg.spines.values():
+                spine.set_visible(False)
+    elif show_visual_rows:
+        last_row_idx = strip_start_idx + len(strip_rows) - 1
+        for offset, row_img in enumerate(strip_rows):
+            row_idx = strip_start_idx + offset
+            ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
+            ax_row.imshow(
+                row_img,
+                aspect=_strip_aspect_for_square_pixels(row_img, t_max),
+                extent=[0.0, t_max, 0.0, 1.0],
+            )
+            if reveal_until_s is not None:
+                ax_row.axvline(reveal_until_s, linestyle=":", lw=1.2, color=style.grid_color, alpha=0.7)
+            ax_row.set_yticks([])
+            if offset < len(row_labels):
+                ax_row.set_ylabel(row_labels[offset], fontsize=max(8, style.tick_size - 1))
+            ax_row.tick_params(axis="x", labelsize=style.tick_size)
+            if row_idx < last_row_idx:
+                ax_row.tick_params(labelbottom=False)
+            else:
+                ax_row.set_xlabel("Tempo [s]", fontsize=style.label_size)
+            for spine in ax_row.spines.values():
+                spine.set_visible(False)
+
+    fig.tight_layout()
+    return fig
+
+
 def plot_pain_sign(
     *,
     video_name: str,
-    strip_img: np.ndarray,
+    strip_img: Optional[np.ndarray],
     ps: PainSignResult,
     thresholds: PainSignThresholds,
     true_label: int,
@@ -2223,13 +2755,48 @@ def plot_pain_sign(
     region_smooth_window: int = 30,
     derivative_corr_method: str = "pearson",
     derivative_min_samples: int = 5,
+    show_visual_rows: bool = True,
     style: PlotStyle = PlotStyle(),
+    average_face_background_path: Optional[PathLike] = None,
+    average_face_keypoints_path: Optional[PathLike] = None,
 ) -> None:
     """Single-model layout aligned with plot_multi_model_pain_sign (no derivatives/metrics)."""
-    _ = derivative_corr_method, derivative_min_samples
+    average_face_row_img = None
+    if show_visual_rows and strip_img is not None and region_df is not None and not region_df.empty:
+        strip_out_size = _infer_strip_out_size(strip_img)
+        num_tiles = max(1, int(round(float(strip_img.shape[1]) / float(strip_out_size[0]))))
+        average_face_row_img = _build_average_face_strip_row(
+            region_df,
+            num_tiles=num_tiles,
+            out_size=strip_out_size,
+            background_path=average_face_background_path,
+            keypoints_path=average_face_keypoints_path,
+        )
 
-    if strip_img.ndim != 3:
-        raise ValueError(f"Expected strip image with 3 dims, got shape {strip_img.shape}")
+    fig = _build_single_model_pain_sign_figure(
+        video_name=video_name,
+        strip_img=strip_img,
+        ps=ps,
+        thresholds=thresholds,
+        true_label=true_label,
+        model_name=model_name,
+        region_df=region_df,
+        region_top_k=region_top_k,
+        region_selection=region_selection,
+        region_smooth_window=region_smooth_window,
+        derivative_corr_method=derivative_corr_method,
+        derivative_min_samples=derivative_min_samples,
+        show_visual_rows=show_visual_rows,
+        style=style,
+        average_face_row_img=average_face_row_img,
+    )
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    _release_figure(fig)
+    return
+
+    _ = derivative_corr_method, derivative_min_samples
 
     time = ps.time_s
     t_max = float(time.max()) if time.size else 1.0
@@ -2242,30 +2809,40 @@ def plot_pain_sign(
     )
     has_regions = region_curves is not None
 
-    total_h = int(strip_img.shape[0])
-    if total_h % 3 == 0:
-        row_count = 3
-    elif total_h % 2 == 0:
-        row_count = 2
-    else:
-        row_count = 1
-
-    row_edges = np.linspace(0, total_h, row_count + 1, dtype=int)
-    strip_rows = [strip_img[row_edges[i] : row_edges[i + 1], :, :] for i in range(row_count)]
-
+    strip_rows: List[np.ndarray] = []
+    row_labels: List[str] = []
+    row_count = 0
     display_name = _format_model_name_for_plot(model_name)
-    row_labels = ["Quadros"]
-    if row_count >= 2:
-        row_labels.append(display_name)
-    if row_count >= 3:
-        row_labels.append("Regioes da malha")
+    if show_visual_rows:
+        if strip_img is None:
+            raise ValueError("strip_img is required when show_visual_rows=True")
+        if strip_img.ndim != 3:
+            raise ValueError(f"Expected strip image with 3 dims, got shape {strip_img.shape}")
+
+        total_h = int(strip_img.shape[0])
+        if total_h % 3 == 0:
+            row_count = 3
+        elif total_h % 2 == 0:
+            row_count = 2
+        else:
+            row_count = 1
+
+        row_edges = np.linspace(0, total_h, row_count + 1, dtype=int)
+        strip_rows = [strip_img[row_edges[i] : row_edges[i + 1], :, :] for i in range(row_count)]
+
+        row_labels = ["Quadros"]
+        if row_count >= 2:
+            row_labels.append(display_name)
+        if row_count >= 3:
+            row_labels.append("Regioes da malha")
 
     height_ratios: List[float] = [3.2]
     if has_regions:
         height_ratios.append(1.6)
-    height_ratios.extend([0.8] * row_count)
+    if show_visual_rows:
+        height_ratios.extend([0.8] * row_count)
 
-    fig_h = max(7.0, 4.8 + 1.1 * row_count + (1.2 if has_regions else 0.0))
+    fig_h = max(5.2 if not show_visual_rows else 7.0, 4.8 + 1.1 * row_count + (1.2 if has_regions else 0.0))
     fig = plt.figure(figsize=(18.5, fig_h))
     gs = GridSpec(
         nrows=len(height_ratios),
@@ -2318,7 +2895,7 @@ def plot_pain_sign(
     ax.set_ylim(-0.02, 1.02)
     ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
     ax.tick_params(axis="both", labelsize=style.tick_size)
-    ax.tick_params(labelbottom=False)
+    ax.tick_params(labelbottom=not (has_regions or show_visual_rows))
     ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
     ax.grid(False, axis="x")
     ax.legend(
@@ -2328,6 +2905,8 @@ def plot_pain_sign(
         frameon=False,
         fontsize=style.tick_size,
     )
+    if not (has_regions or show_visual_rows):
+        ax.set_xlabel("Tempo [s]", fontsize=style.label_size)
 
     strip_start_idx = 1
     if has_regions and region_curves is not None:
@@ -2352,38 +2931,253 @@ def plot_pain_sign(
         ax_regions.set_ylabel("Importancia relativa", fontsize=style.label_size)
         ax_regions.set_xlabel("")
         ax_regions.tick_params(axis="both", labelsize=style.tick_size)
-        ax_regions.tick_params(labelbottom=False)
+        ax_regions.tick_params(labelbottom=not show_visual_rows)
         ax_regions.grid(True, axis="y", alpha=0.18, color=style.grid_color)
         ax_regions.grid(False, axis="x")
         ax_regions.set_ylim(0, 1)
         if time.size:
             ax_regions.set_xlim(0.0, t_max)
+        if not show_visual_rows:
+            ax_regions.set_xlabel("Tempo [s]", fontsize=style.label_size)
         strip_start_idx = 2
 
-    last_row_idx = strip_start_idx + row_count - 1
-    for offset, row_img in enumerate(strip_rows):
-        row_idx = strip_start_idx + offset
-        ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
-        ax_row.imshow(
-            row_img,
-            aspect=_strip_aspect_for_square_pixels(row_img, t_max),
-            extent=[0.0, t_max, 0.0, 1.0],
-        )
-        ax_row.set_yticks([])
-        if offset < len(row_labels):
-            ax_row.set_ylabel(row_labels[offset], fontsize=max(8, style.tick_size - 1))
-        ax_row.tick_params(axis="x", labelsize=style.tick_size)
-        if row_idx < last_row_idx:
-            ax_row.tick_params(labelbottom=False)
-        else:
-            ax_row.set_xlabel("Tempo [s]", fontsize=style.label_size)
-        for spine in ax_row.spines.values():
-            spine.set_visible(False)
+    if show_visual_rows:
+        last_row_idx = strip_start_idx + row_count - 1
+        for offset, row_img in enumerate(strip_rows):
+            row_idx = strip_start_idx + offset
+            ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
+            ax_row.imshow(
+                row_img,
+                aspect=_strip_aspect_for_square_pixels(row_img, t_max),
+                extent=[0.0, t_max, 0.0, 1.0],
+            )
+            ax_row.set_yticks([])
+            if offset < len(row_labels):
+                ax_row.set_ylabel(row_labels[offset], fontsize=max(8, style.tick_size - 1))
+            ax_row.tick_params(axis="x", labelsize=style.tick_size)
+            if row_idx < last_row_idx:
+                ax_row.tick_params(labelbottom=False)
+            else:
+                ax_row.set_xlabel("Tempo [s]", fontsize=style.label_size)
+            for spine in ax_row.spines.values():
+                spine.set_visible(False)
 
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+
+def _figure_to_rgb_array(fig: matplotlib.figure.Figure) -> np.ndarray:
+    fig.canvas.draw()
+    rgba = np.asarray(fig.canvas.buffer_rgba())
+    return np.ascontiguousarray(rgba[..., :3])
+
+
+def _figure_to_bgr_array(fig: matplotlib.figure.Figure) -> np.ndarray:
+    fig.canvas.draw()
+    rgba = np.asarray(fig.canvas.buffer_rgba())
+    return cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
+
+
+def _release_figure(fig: Optional[matplotlib.figure.Figure]) -> None:
+    if fig is None:
+        return
+    try:
+        fig.clf()
+    finally:
+        plt.close(fig)
+
+
+def _pad_frame_for_video(frame_rgb: np.ndarray, fill_value: int = 255) -> np.ndarray:
+    h, w = frame_rgb.shape[:2]
+    pad_h = h % 2
+    pad_w = w % 2
+    if pad_h == 0 and pad_w == 0:
+        return frame_rgb
+    return np.pad(
+        frame_rgb,
+        ((0, pad_h), (0, pad_w), (0, 0)),
+        mode="constant",
+        constant_values=fill_value,
+    )
+
+
+def _infer_clip_fps(time_s: np.ndarray, clip_frame_step: int) -> float:
+    time_s = np.asarray(time_s, dtype=float).reshape(-1)
+    if time_s.size < 2:
+        return 1.0
+    dt = np.diff(time_s)
+    dt = dt[np.isfinite(dt) & (dt > 0)]
+    if dt.size == 0:
+        return 1.0
+    fps = 1.0 / float(np.median(dt))
+    fps /= float(max(1, int(clip_frame_step)))
+    return float(np.clip(fps, 1.0, 60.0))
+
+
+def _open_video_writer(save_path: PathLike, frame_size: Tuple[int, int], fps: float) -> cv2.VideoWriter:
+    save_path = Path(save_path)
+    ext = save_path.suffix.lower()
+    fourcc_map = {
+        ".mp4": "mp4v",
+        ".avi": "MJPG",
+        ".mov": "mp4v",
+    }
+    if ext not in fourcc_map:
+        raise ValueError(f"Unsupported video extension '{ext}'. Use .mp4, .mov, or .avi.")
+
+    writer = cv2.VideoWriter(
+        str(save_path),
+        cv2.VideoWriter_fourcc(*fourcc_map[ext]),
+        float(max(1e-6, fps)),
+        frame_size,
+    )
+    if not writer.isOpened():
+        raise RuntimeError(f"Could not open video writer for {save_path}")
+    return writer
+
+
+def save_pain_sign_evolution_clip(
+    *,
+    video_name: str,
+    strip_img: Optional[np.ndarray],
+    ps: PainSignResult,
+    thresholds: PainSignThresholds,
+    true_label: int,
+    model_name: str,
+    save_path: PathLike,
+    region_df: Optional[pd.DataFrame] = None,
+    region_top_k: int = 0,
+    region_selection: str = "mean",
+    region_smooth_window: int = 30,
+    derivative_corr_method: str = "pearson",
+    derivative_min_samples: int = 5,
+    show_visual_rows: bool = True,
+    style: PlotStyle = PlotStyle(),
+    clip_frame_step: int = 1,
+    clip_fps: Optional[float] = None,
+    hold_last_s: float = 0.75,
+    gc_interval: int = 10,
+    video_dir: Optional[PathLike] = None,
+    xai_root: Optional[PathLike] = None,
+    out_size: Tuple[int, int] = (256, 256),
+    suffix: str = ".jpg",
+    xai_alpha: float = 0.6,
+    clip_figure_scale: float = 0.65,
+    average_face_background_path: Optional[PathLike] = None,
+    average_face_keypoints_path: Optional[PathLike] = None,
+) -> None:
+    """
+    Save a video clip where the pain-sign report is progressively revealed over time.
+
+    The output duration follows the pain-sign time axis unless `clip_fps` is provided.
+    When `video_dir` and `xai_root` are available, the clip shows the current
+    video frame and the corresponding XAI overlay instead of strip snapshots.
+    """
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+
+    time_s = np.asarray(ps.time_s, dtype=float).reshape(-1)
+    step = max(1, int(clip_frame_step))
+    clip_video_dir = None if video_dir is None else Path(video_dir)
+    clip_xai_root = None if xai_root is None else Path(xai_root)
+    img_files: List[Path] = []
+    merged_masks_dir: Optional[Path] = None
+    if show_visual_rows and clip_video_dir is not None and clip_xai_root is not None and clip_video_dir.exists():
+        img_files = _list_frames(clip_video_dir, suffix)
+        merged_masks_dir = _resolve_merged_masks_dir(clip_xai_root, video_name)
+
+    if time_s.size == 0:
+        reveal_times = np.array([0.0], dtype=float)
+    else:
+        frame_indices = np.arange(0, time_s.size, step, dtype=int)
+        if frame_indices.size == 0 or frame_indices[-1] != (time_s.size - 1):
+            frame_indices = np.append(frame_indices, time_s.size - 1)
+        reveal_times = time_s[frame_indices]
+
+    fps = float(clip_fps) if clip_fps is not None else _infer_clip_fps(time_s, step)
+    writer: Optional[cv2.VideoWriter] = None
+    last_frame_bgr: Optional[np.ndarray] = None
+    average_face_row_img = None
+    if show_visual_rows and strip_img is not None and region_df is not None and not region_df.empty:
+        strip_out_size = _infer_strip_out_size(strip_img)
+        num_tiles = max(1, int(round(float(strip_img.shape[1]) / float(strip_out_size[0]))))
+        average_face_row_img = _build_average_face_strip_row(
+            region_df,
+            num_tiles=num_tiles,
+            out_size=strip_out_size,
+            background_path=average_face_background_path,
+            keypoints_path=average_face_keypoints_path,
+        )
+
+    try:
+        for frame_idx, reveal_until_s in enumerate(reveal_times):
+            live_frame_img = None
+            live_overlay_img = None
+            live_average_face_img = None
+            if img_files and merged_masks_dir is not None:
+                live_frame_img, live_overlay_img = _load_clip_visual_pair(
+                    img_files=img_files,
+                    merged_masks_dir=merged_masks_dir,
+                    reveal_until_s=float(reveal_until_s),
+                    t_max=float(time_s[-1]) if time_s.size else 0.0,
+                    out_size=out_size,
+                    xai_alpha=xai_alpha,
+                )
+                live_average_face_img = _build_live_average_face_panel(
+                    region_df,
+                    reveal_until_s=float(reveal_until_s),
+                    out_size=out_size,
+                    background_path=average_face_background_path,
+                    keypoints_path=average_face_keypoints_path,
+                )
+            fig = _build_single_model_pain_sign_figure(
+                video_name=video_name,
+                strip_img=strip_img,
+                ps=ps,
+                thresholds=thresholds,
+                true_label=true_label,
+                model_name=model_name,
+                region_df=region_df,
+                region_top_k=region_top_k,
+                region_selection=region_selection,
+                region_smooth_window=region_smooth_window,
+                derivative_corr_method=derivative_corr_method,
+                derivative_min_samples=derivative_min_samples,
+                show_visual_rows=show_visual_rows,
+                style=style,
+                reveal_until_s=float(reveal_until_s),
+                live_frame_img=live_frame_img,
+                live_overlay_img=live_overlay_img,
+                live_average_face_img=live_average_face_img,
+                average_face_row_img=average_face_row_img,
+                figure_scale=clip_figure_scale,
+            )
+            frame_bgr = _pad_frame_for_video(_figure_to_bgr_array(fig))
+            _release_figure(fig)
+
+            if writer is None:
+                h, w = frame_bgr.shape[:2]
+                writer = _open_video_writer(save_path, (w, h), fps)
+
+            writer.write(frame_bgr)
+            last_frame_bgr = frame_bgr
+            del live_frame_img, live_overlay_img, live_average_face_img
+
+            if gc_interval > 0 and ((frame_idx + 1) % int(gc_interval) == 0):
+                gc.collect()
+
+        if writer is not None and last_frame_bgr is not None and hold_last_s > 0:
+            repeat_count = max(1, int(round(float(hold_last_s) * fps)))
+            for _ in range(repeat_count):
+                writer.write(last_frame_bgr)
+    finally:
+        if writer is not None:
+            writer.release()
+        del writer, last_frame_bgr, reveal_times, time_s, img_files, merged_masks_dir, clip_video_dir, clip_xai_root
+        gc.collect()
+
 
 def _extract_overlay_row(strip_img: np.ndarray, out_size: Tuple[int, int]) -> np.ndarray:
     """Extract only the XAI-overlay row from a strip returned by load_video_strip()."""
@@ -2766,8 +3560,15 @@ def run_pain_sign_report(
     landmark_dir: Optional[PathLike] = None,
     mesh_alpha: float = 0.45,
     xai_alpha: float = 0.6,
+    hide_visual_rows: bool = False,
+    generate_video_clips: bool = False,
+    clip_ext: str = ".mp4",
+    clip_frame_step: int = 1,
+    clip_fps: Optional[float] = None,
+    clip_hold_last_s: float = 0.75,
+    clip_figure_scale: float = 0.65,
 ) -> Dict[str, np.ndarray]:
-    """Generates per-video PDFs and returns arrays for metrics."""
+    """Generates per-video PDFs and, optionally, time-evolving video clips."""
     thresholds = get_thresholds_for_model(model_name)
     out_dir = Path(out_dir)
     frames_root = Path(path_icopevid_frames)
@@ -2779,16 +3580,18 @@ def run_pain_sign_report(
 
     for video_name in results_video.keys():
         video_dir = frames_root / video_name
-        strip = load_video_strip(
-            video_dir,
-            model_name=model_name,
-            xai_root=xai_root,
-            frame_step=frame_step,
-            include_mesh_regions=include_mesh_regions,
-            landmark_dir=landmark_dir,
-            mesh_alpha=mesh_alpha,
-            xai_alpha=xai_alpha,
-        )
+        strip = None
+        if not hide_visual_rows:
+            strip = load_video_strip(
+                video_dir,
+                model_name=model_name,
+                xai_root=xai_root,
+                frame_step=frame_step,
+                include_mesh_regions=include_mesh_regions,
+                landmark_dir=landmark_dir,
+                mesh_alpha=mesh_alpha,
+                xai_alpha=xai_alpha,
+            )
 
         true_label = infer_true_label(video_name)
         labels.append(true_label)
@@ -2830,7 +3633,36 @@ def run_pain_sign_report(
             region_top_k=region_top_k,
             region_selection=region_selection,
             region_smooth_window=region_smooth_window,
+            show_visual_rows=not hide_visual_rows,
         )
+        if generate_video_clips:
+            clip_path = out_dir / f"{video_name}_{model_name}{clip_ext}"
+            save_pain_sign_evolution_clip(
+                video_name=video_name,
+                strip_img=strip,
+                ps=ps,
+                thresholds=thresholds,
+                true_label=true_label,
+                model_name=model_name,
+                save_path=clip_path,
+                region_df=region_df,
+                region_top_k=region_top_k,
+                region_selection=region_selection,
+                region_smooth_window=region_smooth_window,
+                show_visual_rows=not hide_visual_rows,
+                clip_frame_step=clip_frame_step,
+                clip_fps=clip_fps,
+                hold_last_s=clip_hold_last_s,
+                clip_figure_scale=clip_figure_scale,
+                video_dir=video_dir,
+                xai_root=xai_root,
+                xai_alpha=xai_alpha,
+            )
+
+        del video_dir, strip, ps, region_df, save_path
+        if generate_video_clips:
+            del clip_path
+        gc.collect()
 
     gc.collect()
 
