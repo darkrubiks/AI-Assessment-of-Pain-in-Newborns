@@ -91,6 +91,51 @@ def calculate_xai_score(xai_mask: np.ndarray, region_masks: dict, sort: bool=Fal
         return region_scores
 
 
+def _build_forehead_polygon(keypoints: np.ndarray) -> np.ndarray:
+    eyebrow_outline = keypoints[[43, 48, 49, 51, 50, 102, 103, 104, 105, 101]].astype(np.float32)
+
+    right_eyebrow = keypoints[[43, 44, 45, 47, 46, 50, 51, 49, 48]].astype(np.float32)
+    left_eyebrow = keypoints[[97, 98, 99, 100, 101, 105, 104, 103, 102]].astype(np.float32)
+    right_eye = keypoints[[81, 89, 90, 87, 91, 93, 101, 100, 99, 98, 97]].astype(np.float32)
+    left_eye = keypoints[[75, 39, 37, 33, 36, 35, 43, 44, 45, 47, 46]].astype(np.float32)
+
+    brow_center = np.vstack((right_eyebrow, left_eyebrow)).mean(axis=0)
+    right_eye_center = right_eye.mean(axis=0)
+    left_eye_center = left_eye.mean(axis=0)
+    average_eye_center = np.vstack((right_eye_center, left_eye_center)).mean(axis=0)
+
+    brow_width = np.ptp(eyebrow_outline[:, 0])
+    brow_to_eye_distance = abs(average_eye_center[1] - brow_center[1])
+    forehead_height = np.clip(
+        max(brow_to_eye_distance * 1.8, brow_width * 0.32),
+        28.0,
+        96.0,
+    )
+
+    top_outline = eyebrow_outline.copy()
+    top_outline[:, 1] -= forehead_height
+    top_outline[:, 0] = brow_center[0] + (top_outline[:, 0] - brow_center[0]) * 1.08
+
+    forehead = np.vstack((eyebrow_outline, top_outline[::-1]))
+    forehead[:, 0] = np.clip(forehead[:, 0], 0, 511)
+    forehead[:, 1] = np.clip(forehead[:, 1], 0, 511)
+
+    return np.round(forehead).astype(np.int32)
+
+
+def _build_face_hull_polygon(keypoints: np.ndarray, forehead: np.ndarray) -> np.ndarray:
+    face_outline = keypoints[[1, 9, 10, 11, 13, 14, 15, 16, 2, 3, 4, 5, 6, 7, 8, 0,
+                              24, 23, 22, 21, 20, 19, 18, 32, 31, 30, 29, 28, 27,
+                              26, 25, 17]].astype(np.float32)
+
+    face_hull = cv2.convexHull(np.vstack((face_outline, forehead)).astype(np.float32))
+    face_hull = face_hull.reshape(-1, 2)
+    face_hull[:, 0] = np.clip(face_hull[:, 0], 0, 511)
+    face_hull[:, 1] = np.clip(face_hull[:, 1], 0, 511)
+
+    return np.round(face_hull).astype(np.int32)
+
+
 def create_face_regions_masks(keypoints: np.ndarray) -> dict:
     """
     Creates regions masks based on 106 facial keypoints, for more
@@ -136,15 +181,8 @@ def create_face_regions_masks(keypoints: np.ndarray) -> dict:
     right_cheek = keypoints[[29, 30, 31, 32, 18, 19, 83, 82, 81, 89, 90, 87, 91, 93]].astype(np.int32)
     left_cheek = keypoints[[13, 14, 15, 16, 2, 3, 77, 76, 75, 39, 37, 33, 36, 35]].astype(np.int32)
 
-    foreahead_ouline = keypoints[[43, 48, 49, 51, 50 ,102, 103, 104, 105,101]]
-    foread_y = keypoints[[101, 105, 104, 103, 102 ,50, 51, 49, 48,43]] + np.array([0, -90])
-
-    forehead = np.vstack((foreahead_ouline, foread_y)).astype(np.int32)
-
-    outside = keypoints[[1, 9, 10, 11, 13, 14, 15, 16, 2, 3, 4, 5, 6, 7, 8, 0, 24, 23, 22, 21, 20, 19, 18, 32,
-                         31, 30, 29, 28, 27, 26, 25, 17]].astype(np.int32)
-    
-    outside = np.vstack((outside, forehead))
+    forehead = _build_forehead_polygon(keypoints)
+    outside = _build_face_hull_polygon(keypoints, forehead)
 
     regions = {"right_eyebrown": right_eyebrown, "left_eyebrown": left_eyebrown,
                "right_eye": right_eye, "left_eye": left_eye, "nose": nose, "between_eyes": between_eyes,
