@@ -16,7 +16,7 @@ Pain Assessment" in 2021 34th SIBGRAPI.
 
 doi: https://doi.org/10.1109/SIBGRAPI54419.2021.00060
 """
-import os
+from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,7 +26,8 @@ class VGGFace(nn.Module):
     def __init__(self) -> None:
         super(VGGFace, self).__init__()
 
-        self.VGGFace = torch.load(os.path.join('models','weights','VGG_face_original_model.pt'), weights_only=False)
+        weights_path = Path(__file__).resolve().parent / "weights" / "VGG_face_original_model.pt"
+        self.VGGFace = torch.load(weights_path, weights_only=False)
 
         for param in self.VGGFace.parameters():
             param.requires_grad  = False
