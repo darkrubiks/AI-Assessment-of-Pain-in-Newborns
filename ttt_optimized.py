@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import pickle
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -2505,6 +2506,7 @@ def _build_single_model_pain_sign_figure(
     derivative_corr_method: str = "pearson",
     derivative_min_samples: int = 5,
     show_visual_rows: bool = True,
+    show_average_face_row: bool = True,
     style: PlotStyle = PlotStyle(),
     reveal_until_s: Optional[float] = None,
     live_frame_img: Optional[np.ndarray] = None,
@@ -2522,6 +2524,7 @@ def _build_single_model_pain_sign_figure(
     time_eps = 1e-9
     visible_mask = np.ones(time.shape, dtype=bool) if reveal_until_s is None else (time <= (reveal_until_s + time_eps))
     use_live_visuals = show_visual_rows and live_frame_img is not None and live_overlay_img is not None
+    use_live_average_only = (not show_visual_rows) and show_average_face_row and live_average_face_img is not None
     region_curves = _prepare_region_curves(
         region_df,
         region_selection=region_selection,
@@ -2555,23 +2558,39 @@ def _build_single_model_pain_sign_figure(
             row_labels.append(display_name)
         if row_count >= 3:
             row_labels.append("Regioes da malha")
-        if average_face_row_img is not None:
+        if show_average_face_row and average_face_row_img is not None:
             strip_rows.append(
                 _mask_strip_row_to_time(average_face_row_img, reveal_until_s=reveal_until_s, t_max=t_max, fill_value=1.0)
             )
             row_labels.append(AVERAGE_FACE_ROW_LABEL)
+    elif show_average_face_row and average_face_row_img is not None:
+        strip_rows = [
+            _mask_strip_row_to_time(average_face_row_img, reveal_until_s=reveal_until_s, t_max=t_max, fill_value=1.0)
+        ]
+        row_labels = [AVERAGE_FACE_ROW_LABEL]
+
+    live_visual_cols = 3 if show_average_face_row and live_average_face_img is not None else 2
+    live_visual_height = 4.8 if live_visual_cols == 3 else 4.2
+    average_only_height = 3.8
 
     height_ratios: List[float] = [3.2]
     if has_regions:
         height_ratios.append(1.6)
     if use_live_visuals:
-        height_ratios.append(2.2)
-    elif show_visual_rows:
+        height_ratios.append(live_visual_height)
+    elif use_live_average_only:
+        height_ratios.append(average_only_height)
+    elif strip_rows:
         height_ratios.extend([0.8] * len(strip_rows))
 
+    has_visual_section = use_live_visuals or use_live_average_only or bool(strip_rows)
+    visual_height_hint = (
+        live_visual_height if use_live_visuals else (average_only_height if use_live_average_only else (1.1 * len(strip_rows)))
+    )
+
     fig_h = max(
-        5.2 if not show_visual_rows else 7.0,
-        4.8 + (2.0 if use_live_visuals else (1.1 * len(strip_rows))) + (1.2 if has_regions else 0.0),
+        5.2 if not has_visual_section else 8.0,
+        4.8 + visual_height_hint + (1.2 if has_regions else 0.0),
     )
     figure_scale = float(max(0.25, figure_scale))
     fig = plt.figure(figsize=(18.5 * figure_scale, fig_h * figure_scale))
@@ -2631,7 +2650,7 @@ def _build_single_model_pain_sign_figure(
     ax.set_ylim(-0.02, 1.02)
     ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
     ax.tick_params(axis="both", labelsize=style.tick_size)
-    ax.tick_params(labelbottom=not (has_regions or show_visual_rows))
+    ax.tick_params(labelbottom=not (has_regions or has_visual_section))
     ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
     ax.grid(False, axis="x")
     ax.legend(
@@ -2641,7 +2660,7 @@ def _build_single_model_pain_sign_figure(
         frameon=False,
         fontsize=style.tick_size,
     )
-    if not (has_regions or show_visual_rows):
+    if not (has_regions or has_visual_section):
         ax.set_xlabel("Tempo [s]", fontsize=style.label_size)
 
     strip_start_idx = 1
@@ -2673,7 +2692,7 @@ def _build_single_model_pain_sign_figure(
         ax_regions.set_ylabel("Importancia relativa", fontsize=style.label_size)
         ax_regions.set_xlabel("")
         ax_regions.tick_params(axis="both", labelsize=style.tick_size)
-        ax_regions.tick_params(labelbottom=not show_visual_rows)
+        ax_regions.tick_params(labelbottom=not has_visual_section)
         ax_regions.grid(True, axis="y", alpha=0.18, color=style.grid_color)
         ax_regions.grid(False, axis="x")
         ax_regions.set_ylim(0, 1)
@@ -2681,14 +2700,14 @@ def _build_single_model_pain_sign_figure(
             ax_regions.set_xlim(0.0, t_max)
         if reveal_until_s is not None:
             ax_regions.axvline(reveal_until_s, linestyle=":", lw=1.4, color=style.grid_color, alpha=0.8, zorder=5)
-        if not show_visual_rows:
+        if not has_visual_section:
             ax_regions.set_xlabel("Tempo [s]", fontsize=style.label_size)
         strip_start_idx = 2
 
     if use_live_visuals:
         visual_row = strip_start_idx
-        n_visual_cols = 3 if live_average_face_img is not None else 2
-        visual_gs = gs[visual_row].subgridspec(1, n_visual_cols, wspace=0.02)
+        n_visual_cols = live_visual_cols
+        visual_gs = gs[visual_row].subgridspec(1, n_visual_cols, wspace=0.03)
         ax_video = fig.add_subplot(visual_gs[0, 0])
         ax_video.imshow(np.clip(live_frame_img, 0.0, 1.0))
         ax_video.set_title("Video", fontsize=style.label_size)
@@ -2705,7 +2724,7 @@ def _build_single_model_pain_sign_figure(
         for spine in ax_overlay.spines.values():
             spine.set_visible(False)
 
-        if live_average_face_img is not None:
+        if show_average_face_row and live_average_face_img is not None:
             ax_avg = fig.add_subplot(visual_gs[0, 2])
             ax_avg.imshow(np.clip(live_average_face_img, 0.0, 1.0))
             ax_avg.set_title(AVERAGE_FACE_ROW_LABEL, fontsize=style.label_size)
@@ -2713,7 +2732,15 @@ def _build_single_model_pain_sign_figure(
             ax_avg.set_yticks([])
             for spine in ax_avg.spines.values():
                 spine.set_visible(False)
-    elif show_visual_rows:
+    elif use_live_average_only:
+        ax_avg = fig.add_subplot(gs[strip_start_idx])
+        ax_avg.imshow(np.clip(live_average_face_img, 0.0, 1.0))
+        ax_avg.set_title(AVERAGE_FACE_ROW_LABEL, fontsize=style.label_size)
+        ax_avg.set_xticks([])
+        ax_avg.set_yticks([])
+        for spine in ax_avg.spines.values():
+            spine.set_visible(False)
+    elif strip_rows:
         last_row_idx = strip_start_idx + len(strip_rows) - 1
         for offset, row_img in enumerate(strip_rows):
             row_idx = strip_start_idx + offset
@@ -2756,13 +2783,14 @@ def plot_pain_sign(
     derivative_corr_method: str = "pearson",
     derivative_min_samples: int = 5,
     show_visual_rows: bool = True,
+    show_average_face_row: bool = True,
     style: PlotStyle = PlotStyle(),
     average_face_background_path: Optional[PathLike] = None,
     average_face_keypoints_path: Optional[PathLike] = None,
 ) -> None:
     """Single-model layout aligned with plot_multi_model_pain_sign (no derivatives/metrics)."""
     average_face_row_img = None
-    if show_visual_rows and strip_img is not None and region_df is not None and not region_df.empty:
+    if show_average_face_row and strip_img is not None and region_df is not None and not region_df.empty:
         strip_out_size = _infer_strip_out_size(strip_img)
         num_tiles = max(1, int(round(float(strip_img.shape[1]) / float(strip_out_size[0]))))
         average_face_row_img = _build_average_face_strip_row(
@@ -2787,6 +2815,7 @@ def plot_pain_sign(
         derivative_corr_method=derivative_corr_method,
         derivative_min_samples=derivative_min_samples,
         show_visual_rows=show_visual_rows,
+        show_average_face_row=show_average_face_row,
         style=style,
         average_face_row_img=average_face_row_img,
     )
@@ -3054,6 +3083,7 @@ def save_pain_sign_evolution_clip(
     derivative_corr_method: str = "pearson",
     derivative_min_samples: int = 5,
     show_visual_rows: bool = True,
+    show_average_face_row: bool = True,
     style: PlotStyle = PlotStyle(),
     clip_frame_step: int = 1,
     clip_fps: Optional[float] = None,
@@ -3100,7 +3130,7 @@ def save_pain_sign_evolution_clip(
     writer: Optional[cv2.VideoWriter] = None
     last_frame_bgr: Optional[np.ndarray] = None
     average_face_row_img = None
-    if show_visual_rows and strip_img is not None and region_df is not None and not region_df.empty:
+    if show_average_face_row and strip_img is not None and region_df is not None and not region_df.empty:
         strip_out_size = _infer_strip_out_size(strip_img)
         num_tiles = max(1, int(round(float(strip_img.shape[1]) / float(strip_out_size[0]))))
         average_face_row_img = _build_average_face_strip_row(
@@ -3125,6 +3155,7 @@ def save_pain_sign_evolution_clip(
                     out_size=out_size,
                     xai_alpha=xai_alpha,
                 )
+            if show_average_face_row:
                 live_average_face_img = _build_live_average_face_panel(
                     region_df,
                     reveal_until_s=float(reveal_until_s),
@@ -3146,6 +3177,7 @@ def save_pain_sign_evolution_clip(
                 derivative_corr_method=derivative_corr_method,
                 derivative_min_samples=derivative_min_samples,
                 show_visual_rows=show_visual_rows,
+                show_average_face_row=show_average_face_row,
                 style=style,
                 reveal_until_s=float(reveal_until_s),
                 live_frame_img=live_frame_img,
@@ -3540,6 +3572,129 @@ def run_multi_model_pain_sign_report(
 # End-to-end runner
 # ---------------------------------------------------------------------
 
+def _run_pain_sign_report_single_video(
+    video_name: str,
+    video_results: Dict,
+    *,
+    model_name: str,
+    frames_root: PathLike,
+    xai_root: PathLike,
+    out_dir: PathLike,
+    thresholds: PainSignThresholds,
+    mcdp: bool,
+    ma_window: int,
+    duration_s: float,
+    frame_step: int,
+    region_frame_step: int,
+    include_region_curves: bool,
+    region_top_k: int,
+    region_selection: str,
+    region_smooth_window: int,
+    include_mesh_regions: bool,
+    landmark_dir: Optional[PathLike],
+    mesh_alpha: float,
+    xai_alpha: float,
+    hide_visual_rows: bool,
+    generate_pdf_reports: bool,
+    generate_video_clips: bool,
+    clip_ext: str,
+    clip_frame_step: int,
+    clip_fps: Optional[float],
+    clip_hold_last_s: float,
+    clip_figure_scale: float,
+) -> Tuple[int, int, float]:
+    frames_root = Path(frames_root)
+    xai_root = Path(xai_root)
+    out_dir = Path(out_dir)
+
+    video_dir = frames_root / video_name
+    strip = None
+    if (not hide_visual_rows) or include_region_curves:
+        strip = load_video_strip(
+            video_dir,
+            model_name=model_name,
+            xai_root=xai_root,
+            frame_step=frame_step,
+            include_mesh_regions=include_mesh_regions,
+            landmark_dir=landmark_dir,
+            mesh_alpha=mesh_alpha,
+            xai_alpha=xai_alpha,
+        )
+
+    true_label = infer_true_label(video_name)
+    ps = compute_pain_sign(
+        video_results,
+        mcdp=mcdp,
+        theta_1=thresholds.theta_1,
+        ma_window=ma_window,
+        duration_s=duration_s,
+    )
+
+    region_df = None
+    if include_region_curves:
+        try:
+            region_df = extract_region_scores_video(
+                video_dir=video_dir,
+                xai_root=xai_root,
+                frame_step=region_frame_step,
+                duration_s=duration_s,
+            )
+        except Exception as exc:
+            print(f"Curvas de regiao ignoradas para {video_name}: {exc}")
+            region_df = None
+
+    save_path = out_dir / f"{video_name}_{model_name}.pdf"
+    if generate_pdf_reports:
+        plot_pain_sign(
+            video_name=video_name,
+            strip_img=strip,
+            ps=ps,
+            thresholds=thresholds,
+            true_label=true_label,
+            model_name=model_name,
+            save_path=save_path,
+            region_df=region_df,
+            region_top_k=region_top_k,
+            region_selection=region_selection,
+            region_smooth_window=region_smooth_window,
+            show_visual_rows=not hide_visual_rows,
+            show_average_face_row=True,
+        )
+    if generate_video_clips:
+        clip_path = out_dir / f"{video_name}_{model_name}{clip_ext}"
+        save_pain_sign_evolution_clip(
+            video_name=video_name,
+            strip_img=strip,
+            ps=ps,
+            thresholds=thresholds,
+            true_label=true_label,
+            model_name=model_name,
+            save_path=clip_path,
+            region_df=region_df,
+            region_top_k=region_top_k,
+            region_selection=region_selection,
+            region_smooth_window=region_smooth_window,
+            show_visual_rows=not hide_visual_rows,
+            show_average_face_row=True,
+            clip_frame_step=clip_frame_step,
+            clip_fps=clip_fps,
+            hold_last_s=clip_hold_last_s,
+            clip_figure_scale=clip_figure_scale,
+            video_dir=video_dir,
+            xai_root=xai_root,
+            xai_alpha=xai_alpha,
+        )
+
+    pred_label = int(ps.pred_label)
+    prob_summary = float(ps.p_summary)
+
+    del video_dir, strip, ps, region_df, save_path
+    if generate_video_clips:
+        del clip_path
+    gc.collect()
+    return true_label, pred_label, prob_summary
+
+
 def run_pain_sign_report(
     results_video: Dict[str, Dict],
     *,
@@ -3561,12 +3716,14 @@ def run_pain_sign_report(
     mesh_alpha: float = 0.45,
     xai_alpha: float = 0.6,
     hide_visual_rows: bool = False,
+    generate_pdf_reports: bool = True,
     generate_video_clips: bool = False,
     clip_ext: str = ".mp4",
     clip_frame_step: int = 1,
     clip_fps: Optional[float] = None,
     clip_hold_last_s: float = 0.75,
     clip_figure_scale: float = 0.65,
+    num_workers: int = 1,
 ) -> Dict[str, np.ndarray]:
     """Generates per-video PDFs and, optionally, time-evolving video clips."""
     thresholds = get_thresholds_for_model(model_name)
@@ -3574,100 +3731,53 @@ def run_pain_sign_report(
     frames_root = Path(path_icopevid_frames)
     xai_root = Path(xai_root)
 
-    labels: List[int] = []
-    preds: List[int] = []
-    probs: List[float] = []
+    run_kwargs = dict(
+        model_name=model_name,
+        frames_root=frames_root,
+        xai_root=xai_root,
+        out_dir=out_dir,
+        thresholds=thresholds,
+        mcdp=mcdp,
+        ma_window=ma_window,
+        duration_s=duration_s,
+        frame_step=frame_step,
+        region_frame_step=region_frame_step,
+        include_region_curves=include_region_curves,
+        region_top_k=region_top_k,
+        region_selection=region_selection,
+        region_smooth_window=region_smooth_window,
+        include_mesh_regions=include_mesh_regions,
+        landmark_dir=landmark_dir,
+        mesh_alpha=mesh_alpha,
+        xai_alpha=xai_alpha,
+        hide_visual_rows=hide_visual_rows,
+        generate_pdf_reports=generate_pdf_reports,
+        generate_video_clips=generate_video_clips,
+        clip_ext=clip_ext,
+        clip_frame_step=clip_frame_step,
+        clip_fps=clip_fps,
+        clip_hold_last_s=clip_hold_last_s,
+        clip_figure_scale=clip_figure_scale,
+    )
 
-    for video_name in results_video.keys():
-        video_dir = frames_root / video_name
-        strip = None
-        if not hide_visual_rows:
-            strip = load_video_strip(
-                video_dir,
-                model_name=model_name,
-                xai_root=xai_root,
-                frame_step=frame_step,
-                include_mesh_regions=include_mesh_regions,
-                landmark_dir=landmark_dir,
-                mesh_alpha=mesh_alpha,
-                xai_alpha=xai_alpha,
-            )
-
-        true_label = infer_true_label(video_name)
-        labels.append(true_label)
-
-        ps = compute_pain_sign(
-            results_video[video_name],
-            mcdp=mcdp,
-            theta_1=thresholds.theta_1,
-            ma_window=ma_window,
-            duration_s=duration_s,
-        )
-
-        preds.append(ps.pred_label)
-        probs.append(ps.p_summary)
-
-        region_df = None
-        if include_region_curves:
-            try:
-                region_df = extract_region_scores_video(
-                    video_dir=video_dir,
-                    xai_root=xai_root,
-                    frame_step=region_frame_step,
-                    duration_s=duration_s,
-                )
-            except Exception as exc:
-                print(f"Curvas de regiao ignoradas para {video_name}: {exc}")
-                region_df = None
-
-        save_path = out_dir / f"{video_name}_{model_name}.pdf"
-        plot_pain_sign(
-            video_name=video_name,
-            strip_img=strip,
-            ps=ps,
-            thresholds=thresholds,
-            true_label=true_label,
-            model_name=model_name,
-            save_path=save_path,
-            region_df=region_df,
-            region_top_k=region_top_k,
-            region_selection=region_selection,
-            region_smooth_window=region_smooth_window,
-            show_visual_rows=not hide_visual_rows,
-        )
-        if generate_video_clips:
-            clip_path = out_dir / f"{video_name}_{model_name}{clip_ext}"
-            save_pain_sign_evolution_clip(
-                video_name=video_name,
-                strip_img=strip,
-                ps=ps,
-                thresholds=thresholds,
-                true_label=true_label,
-                model_name=model_name,
-                save_path=clip_path,
-                region_df=region_df,
-                region_top_k=region_top_k,
-                region_selection=region_selection,
-                region_smooth_window=region_smooth_window,
-                show_visual_rows=not hide_visual_rows,
-                clip_frame_step=clip_frame_step,
-                clip_fps=clip_fps,
-                hold_last_s=clip_hold_last_s,
-                clip_figure_scale=clip_figure_scale,
-                video_dir=video_dir,
-                xai_root=xai_root,
-                xai_alpha=xai_alpha,
-            )
-
-        del video_dir, strip, ps, region_df, save_path
-        if generate_video_clips:
-            del clip_path
-        gc.collect()
+    video_items = list(results_video.items())
+    worker_count = max(1, int(num_workers))
+    outputs: List[Tuple[int, int, float]] = []
+    if worker_count == 1:
+        for video_name, video_results in video_items:
+            outputs.append(_run_pain_sign_report_single_video(video_name, video_results, **run_kwargs))
+    else:
+        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            futures = [
+                executor.submit(_run_pain_sign_report_single_video, video_name, video_results, **run_kwargs)
+                for video_name, video_results in video_items
+            ]
+            outputs = [future.result() for future in futures]
 
     gc.collect()
 
     return {
-        "preds": np.asarray(preds, dtype=int),
-        "probs": np.asarray(probs, dtype=float),
-        "labels": np.asarray(labels, dtype=int),
+        "preds": np.asarray([pred for _, pred, _ in outputs], dtype=int),
+        "probs": np.asarray([prob for _, _, prob in outputs], dtype=float),
+        "labels": np.asarray([label for label, _, _ in outputs], dtype=int),
     }
