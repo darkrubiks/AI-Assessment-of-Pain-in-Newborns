@@ -9,10 +9,10 @@ pipeline will generate 20 new images from 1 single face image. The facial land-
 marks are also augmented.
 """
 
-import os
 import pickle
 from ast import literal_eval
 import logging
+from pathlib import Path
 
 import albumentations as A
 import cv2
@@ -29,14 +29,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
-N_FOLDS = os.listdir(FOLDS_FOLDER_PATH)
+FOLDS_FOLDER_PATH = Path("Datasets") / "Folds"
+N_FOLDS = sorted(folder.name for folder in FOLDS_FOLDER_PATH.iterdir() if folder.is_dir())
 AUGMENTED_IMAGES = 20
 AUGMENTED_SUFFIX = "_AUG_"
 
-def resize_original_img(path, file_name):
+def resize_original_img(path: Path, file_name: str):
+    path = Path(path)
     # Read image
-    img = cv2.imread(os.path.join(path, file_name))
+    img = cv2.imread(str(path / file_name))
 
     # Get corresponding face and keypoints coordinates
     face_coords = iCOPE_UNIFESP_data[iCOPE_UNIFESP_data['new_file_name'] == file_name]['face_coordinates'].values[0]
@@ -47,10 +48,10 @@ def resize_original_img(path, file_name):
     resized = resize(image=img, keypoints=scaled_keypoints)
 
     # Save keypoints and resized image
-    cv2.imwrite(os.path.join(path, file_name), resized['image'])
-    keypoints_path = os.path.join(path, 'Keypoints')
+    cv2.imwrite(str(path / file_name), resized['image'])
+    keypoints_path = path / "Keypoints"
     create_folder(keypoints_path)
-    with open(os.path.join(keypoints_path, file_name.split('.jpg')[0] + ".pkl"), 'wb') as f:
+    with open(keypoints_path / f"{Path(file_name).stem}.pkl", 'wb') as f:
         pickle.dump(resized['keypoints'], f)
 
     return resized['image'], resized['keypoints']
@@ -82,7 +83,7 @@ resize = A.Compose(
 )
 
 # Read the data from the CSV file
-iCOPE_UNIFESP_data = pd.read_csv('iCOPE+UNIFESP_data.csv')
+iCOPE_UNIFESP_data = pd.read_csv(Path("iCOPE+UNIFESP_data.csv"))
 iCOPE_UNIFESP_data['face_coordinates'] = iCOPE_UNIFESP_data['face_coordinates'].apply(literal_eval)
 iCOPE_UNIFESP_data['keypoints_coordinates'] = iCOPE_UNIFESP_data['keypoints_coordinates'].apply(literal_eval)
 
@@ -90,21 +91,21 @@ iCOPE_UNIFESP_data['keypoints_coordinates'] = iCOPE_UNIFESP_data['keypoints_coor
 for fold in N_FOLDS:
     logger.info(f"Augmenting Fold: {fold}")
 
-    train_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold, 'Train')
-    test_fold_path = os.path.join(FOLDS_FOLDER_PATH, fold, 'Test')
-    create_folder(os.path.join(train_fold_path, 'Keypoints'))
-    create_folder(os.path.join(test_fold_path, 'Keypoints'))
+    train_fold_path = FOLDS_FOLDER_PATH / fold / "Train"
+    test_fold_path = FOLDS_FOLDER_PATH / fold / "Test"
+    create_folder(train_fold_path / "Keypoints")
+    create_folder(test_fold_path / "Keypoints")
 
     # Process Test Set: apply only resizing
     logger.info("Applying resizing to Test Set")
-    test_files = [f for f in os.listdir(test_fold_path) if f.endswith('.jpg')]
+    test_files = sorted(f.name for f in test_fold_path.iterdir() if f.is_file() and f.suffix.lower() == '.jpg')
     for file_name in test_files:
         _ = resize_original_img(test_fold_path, file_name)
     logger.info("Completed processing Test Set")
 
     # Process Train Set: apply resizing and augmentation
     logger.info("Applying resizing and augmentation to Train Set")
-    train_files = [f for f in os.listdir(train_fold_path) if f.endswith('.jpg')]
+    train_files = sorted(f.name for f in train_fold_path.iterdir() if f.is_file() and f.suffix.lower() == '.jpg')
     for file_name in train_files:
         img, scaled_keypoints = resize_original_img(train_fold_path, file_name)
 
@@ -116,10 +117,10 @@ for fold in N_FOLDS:
 
             # Save augmented image
             aug_file_name = f'{i:02}{AUGMENTED_SUFFIX}{file_name}'
-            cv2.imwrite(os.path.join(train_fold_path, aug_file_name), transformed['image'])
+            cv2.imwrite(str(train_fold_path / aug_file_name), transformed['image'])
 
             # Save corresponding keypoints
-            aug_landmarks_file = os.path.join(train_fold_path, 'Keypoints', aug_file_name.split('.jpg')[0] + ".pkl")
+            aug_landmarks_file = train_fold_path / "Keypoints" / f"{Path(aug_file_name).stem}.pkl"
             with open(aug_landmarks_file, 'wb') as f:
                 pickle.dump(transformed['keypoints'], f)
     logger.info("Completed processing Train Set")

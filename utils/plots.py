@@ -1,5 +1,5 @@
-import os
-from typing import List
+from pathlib import Path
+from typing import List, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,11 +10,16 @@ from sklearn.metrics import (accuracy_score, average_precision_score,
 
 from calibration.metrics import ECE, calibration_curve
 
+
+def _output_dir(path: Union[str, Path]) -> Path:
+    return Path(path)
+
+
 def plot_calibration_curve(probs: np.ndarray, 
                            labels: np.ndarray, 
                            n_bins: int=10,
                            mode: str='uniform',
-                           path: str=os.getcwd()) -> None:
+                           path: Union[str, Path]=Path.cwd()) -> None:
     """
     Plots the calibration curve. It also includes the predictions probabilities
     histogram.
@@ -53,7 +58,7 @@ def plot_calibration_curve(probs: np.ndarray,
     ax_hist.set_xlabel('Mean Predicted Probability')
     ax_hist.set_ylabel('Count')
 
-    plt.savefig(os.path.join(path,'calibration_curve.png'), 
+    plt.savefig(str(_output_dir(path) / "calibration_curve.png"), 
                 dpi=300, 
                 bbox_inches='tight')
     plt.close()
@@ -62,7 +67,7 @@ def plot_calibration_curve(probs: np.ndarray,
 def plot_confusion_matrix(preds: np.ndarray, 
                           labels: np. ndarray,
                           classes: List[str],
-                          path: str=os.getcwd()) -> None:
+                          path: Union[str, Path]=Path.cwd()) -> None:
     """
     Plots the Confusion Matrix.
 
@@ -95,7 +100,7 @@ def plot_confusion_matrix(preds: np.ndarray,
     plt.title('Confusion Matrix')
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
-    plt.savefig(os.path.join(path,'confusion_matrix.png'), 
+    plt.savefig(str(_output_dir(path) / "confusion_matrix.png"), 
                 dpi=300, 
                 bbox_inches='tight')
     plt.close()
@@ -103,7 +108,7 @@ def plot_confusion_matrix(preds: np.ndarray,
 
 def plot_roc_curve(probs: np.ndarray, 
                    labels: np.ndarray,
-                   path: str=os.getcwd()) -> None:
+                   path: Union[str, Path]=Path.cwd()) -> None:
     """
     Plots the Receiver Operating Characteristic curve.
 
@@ -124,7 +129,7 @@ def plot_roc_curve(probs: np.ndarray,
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Postive Rate')
     plt.legend()
-    plt.savefig(os.path.join(path,'roc_curve.png'), 
+    plt.savefig(str(_output_dir(path) / "roc_curve.png"), 
                 dpi=300, 
                 bbox_inches='tight')
     plt.close()
@@ -132,7 +137,7 @@ def plot_roc_curve(probs: np.ndarray,
 
 def plot_pre_rec_curve(probs: np.ndarray,
                        labels: np.ndarray,
-                       path: str=os.getcwd()) -> None:
+                       path: Union[str, Path]=Path.cwd()) -> None:
     """
     Plots the Precision-Recall curve.
 
@@ -153,7 +158,7 @@ def plot_pre_rec_curve(probs: np.ndarray,
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.legend()
-    plt.savefig(os.path.join(path,'precision_recall_curve.png'), 
+    plt.savefig(str(_output_dir(path) / "precision_recall_curve.png"), 
                 dpi=300, 
                 bbox_inches='tight')
     plt.close()
@@ -161,7 +166,7 @@ def plot_pre_rec_curve(probs: np.ndarray,
 
 def plot_results_above_threshold(probs: np.ndarray,
                                  labels: np.ndarray,
-                                 path: str=os.getcwd()) -> None:
+                                 path: Union[str, Path]=Path.cwd()) -> None:
     """
     Plots the Accuracy, Precision, Recall and F1 Score results
     by changing the probability threshold.
@@ -203,7 +208,7 @@ def plot_results_above_threshold(probs: np.ndarray,
         plt.xlabel('Probability Threshold')
         plt.ylabel(key)
         plt.legend()
-        plt.savefig(os.path.join(path,f'{key}.png'), 
+        plt.savefig(str(_output_dir(path) / f"{key}.png"), 
                     dpi=300, 
                     bbox_inches='tight')
         plt.close()
@@ -213,7 +218,7 @@ def probability_histogram(probs: np.ndarray,
                           labels: np.ndarray, 
                           bins: int=10, 
                           threshold: float=0.5, 
-                          path: str=os.getcwd()) -> None:
+                          path: Union[str, Path]=Path.cwd()) -> None:
     """
     Plots an histogram containing the predicted probabilities for each
     confusion matrix category TN, TP, FN and FP. Also plots the NPV (Negative
@@ -343,7 +348,7 @@ def probability_histogram(probs: np.ndarray,
     ax_curve.legend(loc='upper right')
 
     plt.savefig(
-        os.path.join(path,f'hist.pdf'), 
+        str(_output_dir(path) / "hist.pdf"), 
         dpi=300, 
         bbox_inches='tight'
     )
