@@ -1094,6 +1094,8 @@ def compute_theta_limit_time_percentages(
 
     - theta_2_in_limit: p_hat <= theta_2_low OR p_hat >= theta_2_high
     - theta_3_in_limit: sigma_hat <= theta_3 (NaN if sigma is unavailable)
+    - theta_2_and_theta_3_in_limit: both conditions hold simultaneously
+      (NaN if sigma is unavailable)
     """
     metrics = compute_pain_sign_metrics(
         ps,
@@ -1109,8 +1111,14 @@ def compute_theta_limit_time_percentages(
             "theta_2_in_limit_pct": float("nan"),
             "theta_3_in_limit_time_s": float("nan"),
             "theta_3_in_limit_pct": float("nan"),
+            "theta_2_and_theta_3_in_limit_time_s": float("nan"),
+            "theta_2_and_theta_3_in_limit_pct": float("nan"),
         }
 
+    p = np.asarray(ps.p_hat, dtype=float).reshape(-1)
+    theta_2_mask = (p <= float(thresholds.theta_2_low)) | (
+        p >= float(thresholds.theta_2_high)
+    )
     theta_2_in_limit_time_s = float(metrics.get("precision_no_pain_time_s", 0.0)) + float(
         metrics.get("precision_pain_time_s", 0.0)
     )
@@ -1119,18 +1127,35 @@ def compute_theta_limit_time_percentages(
 
     has_sigma = ps.sigma_hat is not None and np.asarray(ps.sigma_hat, dtype=float).size > 0
     if has_sigma:
+        sigma = np.asarray(ps.sigma_hat, dtype=float).reshape(-1)
         uncertainty_time_s = float(metrics.get("uncertainty_time_s", 0.0))
         theta_3_in_limit_time_s = float(np.clip(total_time_s - uncertainty_time_s, 0.0, total_time_s))
         theta_3_in_limit_pct = float(theta_3_in_limit_time_s / total_time_s)
+        n = min(p.size, sigma.size)
+        joint_mask = theta_2_mask[:n] & (sigma[:n] <= float(thresholds.theta_3))
+        theta_2_and_theta_3_in_limit_time_s = float(
+            np.clip(
+                _duration_from_mask(np.asarray(ps.time_s, dtype=float)[:n], joint_mask),
+                0.0,
+                total_time_s,
+            )
+        )
+        theta_2_and_theta_3_in_limit_pct = float(
+            theta_2_and_theta_3_in_limit_time_s / total_time_s
+        )
     else:
         theta_3_in_limit_time_s = float("nan")
         theta_3_in_limit_pct = float("nan")
+        theta_2_and_theta_3_in_limit_time_s = float("nan")
+        theta_2_and_theta_3_in_limit_pct = float("nan")
 
     return {
         "theta_2_in_limit_time_s": theta_2_in_limit_time_s,
         "theta_2_in_limit_pct": theta_2_in_limit_pct,
         "theta_3_in_limit_time_s": theta_3_in_limit_time_s,
         "theta_3_in_limit_pct": theta_3_in_limit_pct,
+        "theta_2_and_theta_3_in_limit_time_s": theta_2_and_theta_3_in_limit_time_s,
+        "theta_2_and_theta_3_in_limit_pct": theta_2_and_theta_3_in_limit_pct,
     }
 
 
@@ -1151,12 +1176,16 @@ def compute_theta_limit_percentages_per_video(
     - theta_2_in_limit_pct
     - theta_3_in_limit_time_s
     - theta_3_in_limit_pct
+    - theta_2_and_theta_3_in_limit_time_s
+    - theta_2_and_theta_3_in_limit_pct
     """
     columns = [
         "theta_2_in_limit_time_s",
         "theta_2_in_limit_pct",
         "theta_3_in_limit_time_s",
         "theta_3_in_limit_pct",
+        "theta_2_and_theta_3_in_limit_time_s",
+        "theta_2_and_theta_3_in_limit_pct",
     ]
     if not results_video:
         empty = pd.DataFrame(columns=columns)
@@ -1173,6 +1202,8 @@ def compute_theta_limit_percentages_per_video(
             "theta_2_in_limit_pct": float("nan"),
             "theta_3_in_limit_time_s": float("nan"),
             "theta_3_in_limit_pct": float("nan"),
+            "theta_2_and_theta_3_in_limit_time_s": float("nan"),
+            "theta_2_and_theta_3_in_limit_pct": float("nan"),
         }
         try:
             ps = compute_pain_sign(
