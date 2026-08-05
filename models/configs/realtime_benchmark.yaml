@@ -1,0 +1,173 @@
+# Benchmark end-to-end para sustentar ou refutar a alegação de tempo real.
+# Caminhos relativos são resolvidos a partir do diretório de execução.
+device: cuda
+allow_cpu_fallback: false
+seed: 1234
+output_dir: outputs/realtime_benchmark
+warmup_iterations: 10
+resource_sample_interval_s: 0.1
+fail_fast: false
+
+privacy:
+  # O caminho da fonte é substituído por SHA-256 nos resultados. Nomes de
+  # imagens/vídeos nunca são gravados nos CSVs.
+  redact_source_path: true
+
+source:
+  kind: images             # auto | images | video | camera
+  path: Datasets/NewDataset/Images
+  realtime: true
+  target_fps: 30.0         # taxa que o pipeline deve sustentar
+  max_frames: 300          # 10 s a 30 FPS
+  queue_size: 4
+  queue_policy: drop_oldest  # simula descarte em stream quando o consumidor atrasa
+
+detector:
+  enabled: true
+  allowed_modules: [detection, landmark_2d_106]
+  providers: [CUDAExecutionProvider, CPUExecutionProvider]
+  ctx_id: 0
+  det_size: [640, 640]
+  selection: first         # replica o face_detection.py da tese
+  min_score: 0.0
+
+scenarios:
+  # Baselines: custo de um forward pass sem incerteza, XAI ou suavização.
+  - name: NCNN_single
+    enabled: true
+    architecture: NCNN
+    mode: single
+    checkpoints:
+      - experiments/NCNN_FINAL/*_NCNN/Model/best_model.pt
+    smoothing_window: 1
+    xai: {method: none}
+
+  - name: VGGFace_single
+    enabled: true
+    architecture: VGGFace
+    mode: single
+    checkpoints:
+      - experiments/VGGFace_FINAL/*_VGGFace/Model/best_model.pt
+    smoothing_window: 1
+    xai: {method: none}
+
+  - name: ViT_B_32_single
+    enabled: true
+    architecture: ViT
+    mode: single
+    checkpoints:
+      - experiments/ViT_B_32_FINAL/*_ViT/Model/best_model.pt
+    smoothing_window: 1
+    xai: {method: none}
+
+  # Configurações de incerteza e sinal usadas na tese.
+  - name: NCNN_MCDP50_smooth30
+    enabled: true
+    architecture: NCNN
+    mode: mcdp
+    checkpoints:
+      - experiments/NCNN_FINAL/*_NCNN/Model/best_model.pt
+    mcdp_passes: 50
+    dropout_p: 0.3
+    smoothing_window: 30
+    xai: {method: none}
+
+  - name: VGGFace_MCDP50_smooth30
+    enabled: true
+    architecture: VGGFace
+    mode: mcdp
+    checkpoints:
+      - experiments/VGGFace_FINAL/*_VGGFace/Model/best_model.pt
+    mcdp_passes: 50
+    dropout_p: 0.5
+    smoothing_window: 30
+    xai: {method: none}
+
+  - name: ViT_B_32_ensemble10_smooth30
+    enabled: true
+    architecture: ViT
+    mode: ensemble
+    ensemble_size: 10
+    checkpoints:
+      - experiments/ViT_B_32_ENSEMBLE_FINAL/ensemble_*/*_ViT/Model/best_model.pt
+    smoothing_window: 30
+    xai: {method: none}
+
+  # Cenários completos e caros. Execute-os explicitamente com --scenario.
+  # Cada método XAI é executado UMA vez por imagem e as dez máscaras são
+  # normalizadas e combinadas por média simples, conforme RGU_XAI_PAPER.ipynb.
+  - name: NCNN_full_MCDP50_RGU_XAI_average
+    enabled: false
+    warmup_iterations: 1
+    architecture: NCNN
+    mode: mcdp
+    checkpoints:
+      - experiments/NCNN_FINAL/*_NCNN/Model/best_model.pt
+    mcdp_passes: 50
+    dropout_p: 0.3
+    smoothing_window: 30
+    xai:
+      method: rgu_all_average
+      repetitions: 1
+      scope: first
+      blur_radius: 5
+      ig_internal_batch_size: 10
+      gradient_shap_samples: 10
+      gradient_shap_stdevs: 0.0
+      deeplift_shap_baselines: 10
+      occlusion_window: [3, 20, 20]
+      occlusion_strides: [3, 5, 5]
+      lime_segments: 100
+      lime_samples: 500
+      lime_perturbations_per_eval: 64
+
+  - name: VGGFace_full_MCDP50_RGU_XAI_average
+    enabled: false
+    warmup_iterations: 1
+    architecture: VGGFace
+    mode: mcdp
+    checkpoints:
+      - experiments/VGGFace_FINAL/*_VGGFace/Model/best_model.pt
+    mcdp_passes: 50
+    dropout_p: 0.5
+    smoothing_window: 30
+    xai:
+      method: rgu_all_average
+      repetitions: 1
+      scope: first
+      blur_radius: 5
+      ig_internal_batch_size: 10
+      gradient_shap_samples: 10
+      gradient_shap_stdevs: 0.0
+      deeplift_shap_baselines: 10
+      occlusion_window: [3, 20, 20]
+      occlusion_strides: [3, 5, 5]
+      lime_segments: 100
+      lime_samples: 500
+      lime_perturbations_per_eval: 64
+
+  - name: ViT_B_32_full_ensemble10_RGU_XAI_average
+    enabled: false
+    warmup_iterations: 1
+    architecture: ViT
+    mode: ensemble
+    ensemble_size: 10
+    checkpoints:
+      - experiments/ViT_B_32_ENSEMBLE_FINAL/ensemble_*/*_ViT/Model/best_model.pt
+    smoothing_window: 30
+    xai:
+      method: rgu_all_average
+      repetitions: 1
+      # O notebook explica um modelo treinado por vez. O ensemble ainda é usado
+      # na predição, mas o mapa XAI é calculado no primeiro membro configurado.
+      scope: first
+      blur_radius: 5
+      ig_internal_batch_size: 10
+      gradient_shap_samples: 10
+      gradient_shap_stdevs: 0.0
+      deeplift_shap_baselines: 10
+      occlusion_window: [3, 20, 20]
+      occlusion_strides: [3, 5, 5]
+      lime_segments: 100
+      lime_samples: 500
+      lime_perturbations_per_eval: 64
