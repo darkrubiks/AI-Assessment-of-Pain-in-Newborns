@@ -14,6 +14,7 @@ Research code for assessing neonatal pain from facial images, developed at **Cen
 - [Reproducibility](#reproducibility)
 - [Results and publications](#results-and-publications)
 - [Citation and contact](#citation-and-contact)
+- [License](#license)
 
 ## Getting started
 
@@ -174,11 +175,17 @@ The project is developed and researched by [Leonardo Antunes Ferreira](https://w
 
 For questions, use the [issue tracker](https://github.com/darkrubiks/AI-Assessment-of-Pain-in-Newborns/issues) or the profiles above. Do not include patient data.
 
-No repository license file is tracked. Contact the authors about code reuse and the respective owners about dataset and pretrained-model terms.
-
 ### Historical recognitions
 
 These credits are retained as reported in the previous repository README:
 
 - G. A. S. Coutrin, L. P. Carlini, L. A. Ferreira, V. V. Varoto and C. E. Thomaz: *Development of a Mobile Application for Automatic Recognition of Facial Expression of Pain in Newborns*, Municipal Week of Science, Technology and Innovation of Santo André, 8th edition, October 2022.
 - L. P. Carlini, L. A. Ferreira, G. A. S. Coutrin, V. V. Varoto, R. Guinsburg and C. E. Thomaz: *Development of a Mobile Convolutional Neural Network for Neonatal Pain Assessment*, H-INNOVA Health Innovation Award, finalist group, 2nd edition, 2021.
+
+## License
+
+The repository's original software and associated documentation are licensed under the [MIT License](LICENSE), copyright (c) 2026 Leonardo Antunes Ferreira. Academic and commercial reuse are permitted under its terms, including retention of the copyright and license notices.
+
+Permissioned datasets, patient materials, third-party pretrained weights and third-party components retain their separate terms and are not relicensed by this repository. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream attribution and asset guidance, and obtain any required permissions from the respective owners.
+
+InsightFace code is MIT-licensed, but its supplied pretrained models have separate non-commercial research terms unless separately licensed. This repository's MIT license does not grant commercial rights to those models. Consult the [InsightFace license policy](https://github.com/deepinsight/insightface#license).
