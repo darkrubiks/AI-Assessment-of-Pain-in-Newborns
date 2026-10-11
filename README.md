@@ -128,22 +128,11 @@ Uncertainty measures prediction variability, while calibration assesses whether 
 | [train.py](train.py) and [validate.py](validate.py) | Training and evaluation functions. |
 | [AGENTS.md](AGENTS.md) | Contribution, reproducibility and privacy guidance. |
 
-## Reproducibility
-
-Record the repository commit, environment, configuration, dataset revision, exact splits and checkpoints with each experiment. Public code alone is insufficient to reproduce every analysis: permissioned data, pretrained assets and some historical artifacts must be obtained separately.
-
-- **Evaluation splits:** The fold script creates subject-grouped partitions, but their membership and stratification need checking. `TrainAll` splits images and does not guarantee subject independence. The training evaluation set also selects the checkpoint, so it is not an untouched final test set.
-- **Calibration and thresholds:** Check which data was used to fit them. The calibration exporter currently fits on training predictions; independent evaluation is needed to assess generalization.
-- **Historical notebooks:** Some cells depend on older models, helpers or artifact formats. Saved outputs do not establish that a notebook runs from start to finish with the current code.
-- **Image versus video experiments:** Match preprocessing and model revisions to the publication. Still-image performance does not establish video performance or generalization to another population or hospital.
-
-Keep datasets, checkpoints and generated outputs local. Review notebook outputs before sharing, even when their source files are tracked by Git.
-
 ## Results and publications
 
-These papers describe the research associated with the project. Match the code revision, data and checkpoints to the paper you want to reproduce. Some methods belong to related work and are not implemented in this checkout.
+These papers describe the research associated with the project.
 
-1. **From pixels to pain scales: Robust evaluation of explainable AI in neonatal pain detection.** L. A. Ferreira, C. Pirie, G. A. S. Coutrin, L. P. Carlini, C. F. Moreno-Garcia, M. C. M. Barros, R. Guinsburg and C. E. Thomaz. *4th World Conference on eXplainable Artificial Intelligence (XAI 2026)*, Fortaleza, Brazil, 1–3 July **2026**, 22 pp. **Forthcoming:** the [author's bibliography](https://fei.edu.br/~cet/) lists this work as “to appear”; a final proceedings record and DOI have not been confirmed.
+1. **From pixels to pain scales: Robust evaluation of explainable AI in neonatal pain detection.** L. A. Ferreira, C. Pirie, G. A. S. Coutrin, L. P. Carlini, C. F. Moreno-Garcia, M. C. M. Barros, R. Guinsburg and C. E. Thomaz. *4th World Conference on eXplainable Artificial Intelligence (XAI 2026)*, Fortaleza, Brazil, 1–3 July **2026**, 22 pp. “to appear”; a final proceedings record and DOI have not been confirmed.
 
 2. **Is this neonate feeling pain? Leveraging clinical knowledge towards high-precision Large Language Model-based neonatal pain assessment.** Lucas Pereira Carlini, Leonardo Antunes Ferreira, Gabriel de Almeida Sá Coutrin, Tatiany Marcondes Heiderich, Rita de Cássia Xavier Balda, Marina Carvalho de Moraes Barros, Ruth Guinsburg and Carlos Eduardo Thomaz. *Pediatric Research*, **100**(1), pp. 431–438, **2026** (first online **11 December 2025**). DOI: [10.1038/s41390-025-04669-8](https://doi.org/10.1038/s41390-025-04669-8). [Publisher record](https://www.nature.com/articles/s41390-025-04669-8); [bibliographic record](https://pubmed.ncbi.nlm.nih.gov/41381876/).
 
@@ -169,15 +158,13 @@ Modules identify their methodological sources: [N-CNN](https://doi.org/10.1109/I
 
 ## Citation and contact
 
-Cite the publications relevant to the methods and results you use, together with the repository URL and exact commit. There is no tracked `CITATION.cff` or repository release DOI.
+Cite the publications relevant to the methods and results you use, together with the repository URL.
 
 The project is developed and researched by [Leonardo Antunes Ferreira](https://www.linkedin.com/in/leonardoantunesferreira/), [Lucas Pereira Carlini](https://br.linkedin.com/in/lucas-pereira-carlini-947409161), [Gabriel de Almeida Sá Coutrin](https://www.linkedin.com/in/gabriel-coutrin/) and [Carlos Eduardo Thomaz](https://fei.edu.br/~cet/) at FEI, in partnership with UNIFESP. The publications credit the additional collaborators.
 
 For questions, use the [issue tracker](https://github.com/darkrubiks/AI-Assessment-of-Pain-in-Newborns/issues) or the profiles above. Do not include patient data.
 
-### Historical recognitions
-
-These credits are retained as reported in the previous repository README:
+### Recognitions
 
 - G. A. S. Coutrin, L. P. Carlini, L. A. Ferreira, V. V. Varoto and C. E. Thomaz: *Development of a Mobile Application for Automatic Recognition of Facial Expression of Pain in Newborns*, Municipal Week of Science, Technology and Innovation of Santo André, 8th edition, October 2022.
 - L. P. Carlini, L. A. Ferreira, G. A. S. Coutrin, V. V. Varoto, R. Guinsburg and C. E. Thomaz: *Development of a Mobile Convolutional Neural Network for Neonatal Pain Assessment*, H-INNOVA Health Innovation Award, finalist group, 2nd edition, 2021.
