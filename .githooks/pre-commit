@@ -1,0 +1,3 @@
+#!/bin/sh
+# Opt in with: git config core.hooksPath .githooks
+exec "${NOTEBOOK_HYGIENE_PYTHON:-python}" -B scripts/notebook_hygiene.py --check --staged
