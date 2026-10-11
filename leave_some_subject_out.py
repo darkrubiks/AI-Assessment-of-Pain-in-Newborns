@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from shutil import copyfile, rmtree
 
 import pandas as pd
@@ -17,22 +17,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-FOLDS_FOLDER_PATH = os.path.join('Datasets', 'Folds')
-DATASETS_FOLDER_PATH = os.path.join('Datasets', 'DatasetFaces')
+FOLDS_FOLDER_PATH = Path("Datasets") / "Folds"
+DATASETS_FOLDER_PATH = Path("Datasets") / "DatasetFaces"
 N_FOLDS = 10
 
 def copy_files(src_files, dst_folder):
     """
     Copy files from the dataset folder to the destination folder.
     """
+    dst_folder = Path(dst_folder)
     for src_file in src_files:
-        src = os.path.join(DATASETS_FOLDER_PATH, 'Images', src_file)
-        dst = os.path.join(dst_folder, src_file)
+        src = DATASETS_FOLDER_PATH / "Images" / src_file
+        dst = dst_folder / src_file
         copyfile(src, dst)
     logger.info(f"Copied {len(src_files)} files to {dst_folder}")
 
 # Remove and create Folds folder
-if os.path.exists(FOLDS_FOLDER_PATH):
+if FOLDS_FOLDER_PATH.exists():
     rmtree(FOLDS_FOLDER_PATH)
     logger.info(f"Removed existing folder: {FOLDS_FOLDER_PATH}")
 create_folder(FOLDS_FOLDER_PATH)
@@ -73,16 +74,16 @@ logger.info("Completed splitting subjects into folds using StratifiedKFold.")
 for fold in range(N_FOLDS):
     logger.info(f"Processing fold {fold}")
     # Create fold folder
-    fold_path = os.path.join(FOLDS_FOLDER_PATH, str(fold))
+    fold_path = FOLDS_FOLDER_PATH / str(fold)
     create_folder(fold_path)
     logger.info(f"Created fold folder: {fold_path}")
 
     # Create Train and Test folders
-    train_path = os.path.join(fold_path, "Train")
+    train_path = fold_path / "Train"
     create_folder(train_path)
     logger.info(f"Created train folder: {train_path}")
 
-    test_path = os.path.join(fold_path, "Test")
+    test_path = fold_path / "Test"
     create_folder(test_path)
     logger.info(f"Created test folder: {test_path}")
 
@@ -110,12 +111,12 @@ train_set, test_set = train_test_split(
 logger.info(f"Dataset split into train ({len(train_set)}) and test ({len(test_set)}) sets with train size: {TRAIN_SIZE}")
 
 # --- Save the train_test_split data into TrainAll folder with subfolders Train and Test ---
-TRAIN_ALL_FOLDER = os.path.join('Datasets', 'Folds', 'TrainAll')
-TRAIN_ALL_TRAIN_FOLDER = os.path.join(TRAIN_ALL_FOLDER, 'Train')
-TRAIN_ALL_TEST_FOLDER = os.path.join(TRAIN_ALL_FOLDER, 'Test')
+TRAIN_ALL_FOLDER = Path("Datasets") / "Folds" / "TrainAll"
+TRAIN_ALL_TRAIN_FOLDER = TRAIN_ALL_FOLDER / "Train"
+TRAIN_ALL_TEST_FOLDER = TRAIN_ALL_FOLDER / "Test"
 
 # Remove existing TrainAll folder if it exists
-if os.path.exists(TRAIN_ALL_FOLDER):
+if TRAIN_ALL_FOLDER.exists():
     rmtree(TRAIN_ALL_FOLDER)
     logger.info(f"Removed existing folder: {TRAIN_ALL_FOLDER}")
 

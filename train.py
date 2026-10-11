@@ -8,12 +8,12 @@ Code for training Deep Learning models.
 """
 
 import argparse
-import os
 import random
 import shutil
 import time
 from datetime import datetime
 import logging
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -192,18 +192,18 @@ def main(config):
     # Define experiment name to save results
     now = datetime.now()
     timestamp = now.strftime('%Y%m%d_%H%M')
-    experiment_dir = os.path.join(SAVE_DIR, f"{timestamp}_{config['model']}")
+    experiment_dir = SAVE_DIR / f"{timestamp}_{config['model']}"
     create_folder(experiment_dir)
     for folder in ['Logs', 'Model', 'Results']:
-        create_folder(os.path.join(experiment_dir, folder))
+        create_folder(experiment_dir / folder)
    
     # Log file names
-    train_log = os.path.join(experiment_dir, 'Logs', "train_log.csv")
-    test_log = os.path.join(experiment_dir, 'Logs', "test_log.csv")
+    train_log = experiment_dir / "Logs" / "train_log.csv"
+    test_log = experiment_dir / "Logs" / "test_log.csv"
 
     # Filename to save the model
-    model_file = os.path.join(experiment_dir, 'Model', "best_model.pt")
-    shutil.copy(args.config, os.path.join(experiment_dir, 'Model', 'config.yaml'))  # Copy config file
+    model_file = experiment_dir / "Model" / "best_model.pt"
+    shutil.copy(args.config, experiment_dir / "Model" / "config.yaml")  # Copy config file
 
     # Instantiate the model and send to device
     model = getattr(models, config['model'])()
@@ -260,7 +260,7 @@ def main(config):
     logger.info(f"Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
 
     # Run validation plots on the best model
-    logger.info(f"Saving Results to {os.path.join(experiment_dir, 'Results')}")
+    logger.info(f"Saving Results to {experiment_dir / 'Results'}")
     model.eval()
     model.load_state_dict(torch.load(model_file))
 
@@ -285,7 +285,7 @@ def main(config):
         preds_list.cpu().numpy(), 
         probs_list.cpu().numpy(), 
         labels_list.cpu().numpy(), 
-        path=os.path.join(experiment_dir, 'Results')
+        path=experiment_dir / "Results"
     )
 
 
@@ -316,9 +316,9 @@ if __name__ == '__main__':
 
     # Define SAVE_DIR from config
     if 'save_dir' in config:
-        SAVE_DIR = os.path.join(os.getcwd(), config['save_dir'])
+        SAVE_DIR = Path.cwd() / config['save_dir']
     else:
-        SAVE_DIR = os.path.join(os.getcwd(), 'experiments')
+        SAVE_DIR = Path.cwd() / 'experiments'
         logger.warning(f"No 'save_dir' in config, using default: {SAVE_DIR}")
 
     create_folder(SAVE_DIR)

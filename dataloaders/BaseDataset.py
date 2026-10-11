@@ -5,10 +5,10 @@ This Dataset applies preset transformations based on the provided model name and
 loads images from a directory. Optionally, it reads a CSV file to compute soft labels.
 """
 
-import os
 import glob
 import gc
 import re
+from pathlib import Path
 import pandas as pd
 from torch.utils.data import Dataset
 from PIL import Image
@@ -39,13 +39,13 @@ class BaseDataset(Dataset):
 
     def __init__(self, model_name: str, img_dir: str, soft: str = 'None', cache: bool = False) -> None:
         self.model_name = model_name.upper()
-        self.img_dir = img_dir
+        self.img_dir = Path(img_dir)
         self.cache = cache
         self.soft = soft.upper()
 
         # Determine file pattern based on soft labeling option.
         pattern = '*_UNIFESP_*.jpg' if self.soft != 'NONE' else '*.jpg'
-        self.img_paths = sorted(safe_glob(os.path.join(self.img_dir, pattern)))
+        self.img_paths = sorted(Path(p) for p in safe_glob(str(self.img_dir / pattern)))
         if not self.img_paths:
             raise ValueError(f"No images found in {self.img_dir} with pattern {pattern}")
 
@@ -53,7 +53,7 @@ class BaseDataset(Dataset):
         self.transform = PresetTransform(self.model_name).transforms
 
         if self.soft != "NONE":
-            self.nfcs_df = pd.read_csv('iCOPE+UNIFESP_data.csv', usecols=['new_file_name', 'NFCS'])
+            self.nfcs_df = pd.read_csv(Path("iCOPE+UNIFESP_data.csv"), usecols=['new_file_name', 'NFCS'])
             self.soft_labeler = SoftLabel(self.soft)
 
         # Initialize caches.
@@ -82,7 +82,7 @@ class BaseDataset(Dataset):
         """
         Load the label for the image at the given index.
         """
-        filename = os.path.basename(self.img_paths[idx])
+        filename = self.img_paths[idx].name
 
         # Remove augmented prefix if present.
         if 'AUG' in filename:

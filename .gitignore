@@ -1,5 +1,22 @@
 # ignore pycache
 __pycache__
+*.py[cod]
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Test and tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Temporary runtime files
+*.tmp
+*.temp
+
+# Local Python environments
+.venv/
+venv/
 
 # ignore datasets folder and images folder
 Datasets/
@@ -18,3 +35,12 @@ dataset_processing.py
 # ignore extensions
 *.npy
 *.png
+
+outputs/
+.chart-data-*/
+
+# ==================================================
+# AI AGENT WORKSPACE
+# Local agent-generated files, plans, logs and artifacts
+# ==================================================
+.agents/

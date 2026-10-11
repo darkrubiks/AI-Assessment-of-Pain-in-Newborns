@@ -322,8 +322,8 @@ def main() -> None:
     args = parse_arguments()
     logging.basicConfig(level=getattr(logging, args.log_level))
 
-    image_dir = Path("Datasets\\DatasetFaces\\Images")
-    landmarks_dir = Path("Datasets\\DatasetFaces\\Landmarks")
+    image_dir = Path("Datasets") / "DatasetFaces" / "Images"
+    landmarks_dir = Path("Datasets") / "DatasetFaces" / "Landmarks"
     output_dir = args.output
 
     if not image_dir.exists() or not image_dir.is_dir():
