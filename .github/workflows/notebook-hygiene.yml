@@ -1,0 +1,24 @@
+name: Notebook hygiene
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notebook-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Check tracked notebooks
+        run: python -B scripts/notebook_hygiene.py --check
+      - name: Test notebook hygiene
+        run: python -B -m unittest discover -s tests -p test_notebook_hygiene.py
