@@ -26,6 +26,7 @@ from sklearn.metrics import (
 from scipy.stats import entropy
 from scipy.signal import find_peaks
 from matplotlib.gridspec import GridSpec
+from matplotlib.patches import Patch
 from calibration.metrics import ECE, MCE, brier_score, negative_log_likelihood
 from XAI.metrics import create_face_regions_masks, calculate_xai_score
 from XAI.post_processing import kmeans_post_processing
@@ -2604,37 +2605,56 @@ def _build_single_model_pain_sign_figure(
     live_visual_height = 4.8 if live_visual_cols == 3 else 4.2
     average_only_height = 3.8
 
-    height_ratios: List[float] = [3.2]
+    # Keep the header separate; the horizontal region legend uses the row gap.
+    plot_width_inches = 18.5 * (0.985 - 0.075)
+    height_ratios: List[float] = [1.2, 3.2]
     if has_regions:
-        height_ratios.append(1.6)
+        height_ratios.append(2.4)
     if use_live_visuals:
         height_ratios.append(live_visual_height)
     elif use_live_average_only:
         height_ratios.append(average_only_height)
     elif strip_rows:
-        height_ratios.extend([0.8] * len(strip_rows))
+        # Match the strip's physical height to the time plot's width so image
+        # pixels stay square and snapshots remain aligned with the curves.
+        height_ratios.extend(
+            max(0.8, plot_width_inches * row.shape[0] / row.shape[1])
+            for row in strip_rows
+        )
 
-    has_visual_section = use_live_visuals or use_live_average_only or bool(strip_rows)
-    visual_height_hint = (
-        live_visual_height if use_live_visuals else (average_only_height if use_live_average_only else (1.1 * len(strip_rows)))
-    )
-
-    fig_h = max(
-        5.2 if not has_visual_section else 8.0,
-        4.8 + visual_height_hint + (1.2 if has_regions else 0.0),
-    )
+    # Snapshot strips carry a shared time axis; live image panels do not.
+    has_time_strip_rows = bool(strip_rows) and not (use_live_visuals or use_live_average_only)
     figure_scale = float(max(0.25, figure_scale))
+    row_gap_inches = (
+        max(0.35, 0.8 / figure_scale)
+        if use_live_visuals or use_live_average_only else 0.35
+    )
+    fig_h = sum(height_ratios) + row_gap_inches * (len(height_ratios) - 1) + 0.8
     fig = plt.figure(figsize=(18.5 * figure_scale, fig_h * figure_scale))
+    # The project style enables autolayout; this figure uses explicit spacing so
+    # PDFs and every animation frame retain the same panel geometry.
+    fig.set_layout_engine("none")
     gs = GridSpec(
         nrows=len(height_ratios),
         ncols=1,
         height_ratios=height_ratios,
-        hspace=0.03 if has_regions else 0.02,
+        left=0.075,
+        right=0.985,
+        bottom=0.6 / fig_h,
+        top=1.0 - 0.2 / fig_h,
+        hspace=row_gap_inches / (sum(height_ratios) / len(height_ratios)),
+        figure=fig,
     )
 
-    ax = fig.add_subplot(gs[0])
+    ax_header = fig.add_subplot(gs[0, 0])
+    ax_header.set_axis_off()
+    ax = fig.add_subplot(gs[1, 0])
     label_txt = "Dor" if true_label == 1 else "Sem dor"
-    ax.set_title(f"Classe real = {label_txt}", fontsize=style.title_size, y=1.07)
+    ax_header.text(
+        0.5, 0.95, f"Classe real = {label_txt}",
+        ha="center", va="top", fontsize=style.title_size,
+        transform=ax_header.transAxes,
+    )
 
     pred_txt = "Dor" if ps.pred_label == 1 else "Sem dor"
     idx_cross = theta_crossings(ps.p_hat, thresholds.theta_1)
@@ -2681,22 +2701,23 @@ def _build_single_model_pain_sign_figure(
     ax.set_ylim(-0.02, 1.02)
     ax.set_ylabel("Probabilidade de dor", fontsize=style.label_size)
     ax.tick_params(axis="both", labelsize=style.tick_size)
-    ax.tick_params(labelbottom=not (has_regions or has_visual_section))
+    ax.tick_params(labelbottom=not (has_regions or has_time_strip_rows))
     ax.grid(True, axis="y", alpha=0.18, color=style.grid_color)
     ax.grid(False, axis="x")
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.10),
+    ax_header.legend(
+        *ax.get_legend_handles_labels(),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.0),
         ncol=1,
         frameon=False,
         fontsize=style.tick_size,
     )
-    if not (has_regions or has_visual_section):
+    if not (has_regions or has_time_strip_rows):
         ax.set_xlabel("Tempo [s]", fontsize=style.label_size)
 
-    strip_start_idx = 1
+    strip_start_idx = 2
     if has_regions and region_curves is not None:
-        ax_regions = fig.add_subplot(gs[1], sharex=ax)
+        ax_regions = fig.add_subplot(gs[2, 0], sharex=ax)
         region_mask = (
             np.ones(region_curves.time_s.shape, dtype=bool)
             if reveal_until_s is None
@@ -2718,12 +2739,28 @@ def _build_single_model_pain_sign_figure(
                 ax=ax_regions,
                 colors=region_colors,
                 show=False,
-                legend_kwargs={"fontsize": max(8, style.tick_size - 1), "ncol": 2, "frameon": True},
+                legend=False,
             )
+        # Use all selected regions even before two samples are revealed. This
+        # keeps the legend and plot positions stable throughout video clips.
+        ax_regions.legend(
+            handles=[
+                Patch(facecolor=color, label=_region_label_to_ptbr(region))
+                for region, color in zip(region_curves.labels, region_colors)
+            ],
+            loc="lower center", ncol=len(region_curves.labels), frameon=True,
+            bbox_to_anchor=(
+                (ax_regions.get_position().x0 + ax_regions.get_position().x1) / 2.0,
+                ax_regions.get_position().y1 + 0.015 / (fig_h * figure_scale),
+            ),
+            bbox_transform=fig.transFigure,
+            fontsize=max(8, style.tick_size - 1), borderaxespad=0.0,
+            borderpad=0.25, handlelength=1.2, handletextpad=0.4, columnspacing=0.7,
+        )
         ax_regions.set_ylabel("Importancia relativa", fontsize=style.label_size)
         ax_regions.set_xlabel("")
         ax_regions.tick_params(axis="both", labelsize=style.tick_size)
-        ax_regions.tick_params(labelbottom=not has_visual_section)
+        ax_regions.tick_params(labelbottom=not has_time_strip_rows)
         ax_regions.grid(True, axis="y", alpha=0.18, color=style.grid_color)
         ax_regions.grid(False, axis="x")
         ax_regions.set_ylim(0, 1)
@@ -2731,14 +2768,14 @@ def _build_single_model_pain_sign_figure(
             ax_regions.set_xlim(0.0, t_max)
         if reveal_until_s is not None:
             ax_regions.axvline(reveal_until_s, linestyle=":", lw=1.4, color=style.grid_color, alpha=0.8, zorder=5)
-        if not has_visual_section:
+        if not has_time_strip_rows:
             ax_regions.set_xlabel("Tempo [s]", fontsize=style.label_size)
-        strip_start_idx = 2
+        strip_start_idx = 3
 
     if use_live_visuals:
         visual_row = strip_start_idx
         n_visual_cols = live_visual_cols
-        visual_gs = gs[visual_row].subgridspec(1, n_visual_cols, wspace=0.03)
+        visual_gs = gs[visual_row, 0].subgridspec(1, n_visual_cols, wspace=0.12)
         ax_video = fig.add_subplot(visual_gs[0, 0])
         ax_video.imshow(np.clip(live_frame_img, 0.0, 1.0))
         ax_video.set_title("Video", fontsize=style.label_size)
@@ -2764,7 +2801,7 @@ def _build_single_model_pain_sign_figure(
             for spine in ax_avg.spines.values():
                 spine.set_visible(False)
     elif use_live_average_only:
-        ax_avg = fig.add_subplot(gs[strip_start_idx])
+        ax_avg = fig.add_subplot(gs[strip_start_idx, 0])
         ax_avg.imshow(np.clip(live_average_face_img, 0.0, 1.0))
         ax_avg.set_title(AVERAGE_FACE_ROW_LABEL, fontsize=style.label_size)
         ax_avg.set_xticks([])
@@ -2775,7 +2812,7 @@ def _build_single_model_pain_sign_figure(
         last_row_idx = strip_start_idx + len(strip_rows) - 1
         for offset, row_img in enumerate(strip_rows):
             row_idx = strip_start_idx + offset
-            ax_row = fig.add_subplot(gs[row_idx], sharex=ax)
+            ax_row = fig.add_subplot(gs[row_idx, 0], sharex=ax)
             ax_row.imshow(
                 row_img,
                 aspect=_strip_aspect_for_square_pixels(row_img, t_max),
@@ -2794,7 +2831,6 @@ def _build_single_model_pain_sign_figure(
             for spine in ax_row.spines.values():
                 spine.set_visible(False)
 
-    fig.tight_layout()
     return fig
 
 
@@ -3626,6 +3662,7 @@ def _run_pain_sign_report_single_video(
     mesh_alpha: float,
     xai_alpha: float,
     hide_visual_rows: bool,
+    show_average_face_row: bool,
     generate_pdf_reports: bool,
     generate_video_clips: bool,
     clip_ext: str,
@@ -3640,7 +3677,7 @@ def _run_pain_sign_report_single_video(
 
     video_dir = frames_root / video_name
     strip = None
-    if (not hide_visual_rows) or include_region_curves:
+    if (not hide_visual_rows) or (show_average_face_row and include_region_curves):
         strip = load_video_strip(
             video_dir,
             model_name=model_name,
@@ -3689,7 +3726,7 @@ def _run_pain_sign_report_single_video(
             region_selection=region_selection,
             region_smooth_window=region_smooth_window,
             show_visual_rows=not hide_visual_rows,
-            show_average_face_row=True,
+            show_average_face_row=show_average_face_row,
         )
     if generate_video_clips:
         clip_path = out_dir / f"{video_name}_{model_name}{clip_ext}"
@@ -3706,7 +3743,7 @@ def _run_pain_sign_report_single_video(
             region_selection=region_selection,
             region_smooth_window=region_smooth_window,
             show_visual_rows=not hide_visual_rows,
-            show_average_face_row=True,
+            show_average_face_row=show_average_face_row,
             clip_frame_step=clip_frame_step,
             clip_fps=clip_fps,
             hold_last_s=clip_hold_last_s,
@@ -3747,6 +3784,7 @@ def run_pain_sign_report(
     mesh_alpha: float = 0.45,
     xai_alpha: float = 0.6,
     hide_visual_rows: bool = False,
+    show_average_face_row: bool = True,
     generate_pdf_reports: bool = True,
     generate_video_clips: bool = False,
     clip_ext: str = ".mp4",
@@ -3756,11 +3794,22 @@ def run_pain_sign_report(
     clip_figure_scale: float = 0.65,
     num_workers: int = 1,
 ) -> Dict[str, np.ndarray]:
-    """Generates per-video PDFs and, optionally, time-evolving video clips."""
+    """Generates per-video PDFs and, optionally, time-evolving video clips.
+
+    Set show_average_face_row=False to omit the average face with XAI from both
+    outputs without loading its assets. This is independent of hide_visual_rows,
+    which controls patient frames and their overlays. The average face uses the
+    region scores computed when include_region_curves=True.
+    """
     thresholds = get_thresholds_for_model(model_name)
     out_dir = Path(out_dir)
     frames_root = Path(path_icopevid_frames)
     xai_root = Path(xai_root)
+    if ((not hide_visual_rows) or include_region_curves) and not frames_root.is_dir():
+        raise FileNotFoundError(
+            f"Dataset frames not found: {frames_root}. Prepare the iCOPEvid frames "
+            "or pass the existing frames directory via path_icopevid_frames."
+        )
 
     run_kwargs = dict(
         model_name=model_name,
@@ -3782,6 +3831,7 @@ def run_pain_sign_report(
         mesh_alpha=mesh_alpha,
         xai_alpha=xai_alpha,
         hide_visual_rows=hide_visual_rows,
+        show_average_face_row=show_average_face_row,
         generate_pdf_reports=generate_pdf_reports,
         generate_video_clips=generate_video_clips,
         clip_ext=clip_ext,

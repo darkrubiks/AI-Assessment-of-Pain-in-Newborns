@@ -18,3 +18,6 @@ dataset_processing.py
 # ignore extensions
 *.npy
 *.png
+
+outputs/
+.chart-data-*/
