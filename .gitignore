@@ -17,6 +17,7 @@ __pycache__
 # Local Python environments
 .venv/
 venv/
+.vscode/
 
 # ignore datasets folder and images folder
 Datasets/
