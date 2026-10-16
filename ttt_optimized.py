@@ -2546,6 +2546,7 @@ def _build_single_model_pain_sign_figure(
     live_average_face_img: Optional[np.ndarray] = None,
     average_face_row_img: Optional[np.ndarray] = None,
     figure_scale: float = 1.0,
+    sign_kmeans_model: Optional[SignKMeansModel] = None,
 ) -> matplotlib.figure.Figure:
     """Build the single-model pain-sign figure, optionally revealing it up to a time cursor."""
     _ = video_name, derivative_corr_method, derivative_min_samples
@@ -2662,7 +2663,7 @@ def _build_single_model_pain_sign_figure(
         ps,
         theta_1=thresholds.theta_1,
         theta_3=thresholds.theta_3,
-        sign_kmeans_model=None,
+        sign_kmeans_model=sign_kmeans_model,
     )
     _sign_type_ptbr = _sign_type_to_ptbr(sign_type)
     if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
@@ -2674,7 +2675,7 @@ def _build_single_model_pain_sign_figure(
 
     line_label = (
         f"{display_name} | {pred_txt} ($\\hat{{p}}$={ps.p_summary:.2f}) | "
-        f"Irregular | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
+        f"{_sign_type_ptbr} | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
     )
     model_color = _resolve_model_curve_color(model_name, fallback=style.signal_color)
     ax.plot(ps.time_s[visible_mask], ps.p_hat[visible_mask], lw=2.3, color=model_color, label=line_label)
@@ -2854,6 +2855,7 @@ def plot_pain_sign(
     style: PlotStyle = PlotStyle(),
     average_face_background_path: Optional[PathLike] = None,
     average_face_keypoints_path: Optional[PathLike] = None,
+    sign_kmeans_model: Optional[SignKMeansModel] = None,
 ) -> None:
     """Single-model layout aligned with plot_multi_model_pain_sign (no derivatives/metrics)."""
     average_face_row_img = None
@@ -2885,6 +2887,7 @@ def plot_pain_sign(
         show_average_face_row=show_average_face_row,
         style=style,
         average_face_row_img=average_face_row_img,
+        sign_kmeans_model=sign_kmeans_model,
     )
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2957,7 +2960,7 @@ def plot_pain_sign(
         ps,
         theta_1=thresholds.theta_1,
         theta_3=thresholds.theta_3,
-        sign_kmeans_model=None,
+        sign_kmeans_model=sign_kmeans_model,
     )
     sign_type_ptbr = _sign_type_to_ptbr(sign_type)
     if ps.sigma_summary is None or not np.isfinite(ps.sigma_summary):
@@ -2969,8 +2972,8 @@ def plot_pain_sign(
 
     line_label = (
         f"{display_name} | {pred_txt} ($\\hat{{p}}$={ps.p_summary:.2f}) | "
-        #f"{sign_type_ptbr} | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
-        f"Irregular | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
+        f"{sign_type_ptbr} | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
+        #f"Irregular | {unc_state} ($\\hat{{\\sigma}}$={sigma_txt})"
     )
     model_color = _resolve_model_curve_color(model_name, fallback=style.signal_color)
     ax.plot(ps.time_s, ps.p_hat, lw=2.3, color=model_color, label=line_label)
@@ -3164,6 +3167,7 @@ def save_pain_sign_evolution_clip(
     clip_figure_scale: float = 0.65,
     average_face_background_path: Optional[PathLike] = None,
     average_face_keypoints_path: Optional[PathLike] = None,
+    sign_kmeans_model: Optional[SignKMeansModel] = None,
 ) -> None:
     """
     Save a video clip where the pain-sign report is progressively revealed over time.
@@ -3252,6 +3256,7 @@ def save_pain_sign_evolution_clip(
                 live_average_face_img=live_average_face_img,
                 average_face_row_img=average_face_row_img,
                 figure_scale=clip_figure_scale,
+                sign_kmeans_model=sign_kmeans_model,
             )
             frame_bgr = _pad_frame_for_video(_figure_to_bgr_array(fig))
             _release_figure(fig)
@@ -3670,6 +3675,7 @@ def _run_pain_sign_report_single_video(
     clip_fps: Optional[float],
     clip_hold_last_s: float,
     clip_figure_scale: float,
+    sign_kmeans_model: Optional[SignKMeansModel] = None,
 ) -> Tuple[int, int, float]:
     frames_root = Path(frames_root)
     xai_root = Path(xai_root)
@@ -3727,6 +3733,7 @@ def _run_pain_sign_report_single_video(
             region_smooth_window=region_smooth_window,
             show_visual_rows=not hide_visual_rows,
             show_average_face_row=show_average_face_row,
+            sign_kmeans_model=sign_kmeans_model,
         )
     if generate_video_clips:
         clip_path = out_dir / f"{video_name}_{model_name}{clip_ext}"
@@ -3751,6 +3758,7 @@ def _run_pain_sign_report_single_video(
             video_dir=video_dir,
             xai_root=xai_root,
             xai_alpha=xai_alpha,
+            sign_kmeans_model=sign_kmeans_model,
         )
 
     pred_label = int(ps.pred_label)
@@ -3793,6 +3801,7 @@ def run_pain_sign_report(
     clip_hold_last_s: float = 0.75,
     clip_figure_scale: float = 0.65,
     num_workers: int = 1,
+    sign_kmeans_model: Optional[SignKMeansModel] = None,
 ) -> Dict[str, np.ndarray]:
     """Generates per-video PDFs and, optionally, time-evolving video clips.
 
@@ -3800,6 +3809,11 @@ def run_pain_sign_report(
     outputs without loading its assets. This is independent of hide_visual_rows,
     which controls patient frames and their overlays. The average face uses the
     region scores computed when include_region_curves=True.
+
+    Unless sign_kmeans_model is supplied, fit it once using this model's
+    results_video and the report's smoothing settings. Supply a pooled model
+    to reuse the same sign-type clusters across separate model reports.
+    Direct plot/clip calls must receive a fitted model to use KMeans labels.
     """
     thresholds = get_thresholds_for_model(model_name)
     out_dir = Path(out_dir)
@@ -3810,6 +3824,20 @@ def run_pain_sign_report(
             f"Dataset frames not found: {frames_root}. Prepare the iCOPEvid frames "
             "or pass the existing frames directory via path_icopevid_frames."
         )
+
+    if sign_kmeans_model is None and (generate_pdf_reports or generate_video_clips):
+        sign_kmeans_model = _fit_notebook_sign_kmeans_all_models(
+            {model_name: results_video},
+            mcdp=mcdp,
+            ma_window=ma_window,
+            duration_s=duration_s,
+        )
+        if sign_kmeans_model is None:
+            print(
+                "Warning: could not fit the pain-sign KMeans model; "
+                "sign types will be indeterminate. Fitting requires at least "
+                "three distinct finite [entropy, crossings] feature pairs."
+            )
 
     run_kwargs = dict(
         model_name=model_name,
@@ -3839,6 +3867,7 @@ def run_pain_sign_report(
         clip_fps=clip_fps,
         clip_hold_last_s=clip_hold_last_s,
         clip_figure_scale=clip_figure_scale,
+        sign_kmeans_model=sign_kmeans_model,
     )
 
     video_items = list(results_video.items())

@@ -1,3 +1,10 @@
 #!/bin/sh
-# Opt in with: git config core.hooksPath .githooks
-exec "${NOTEBOOK_HYGIENE_PYTHON:-python}" -B scripts/notebook_hygiene.py --check --staged
+
+# Resolve Python from Git configuration or use PATH
+PYTHON_EXEC="$(git config --get notebook-hygiene.python)"
+
+if [ -z "$PYTHON_EXEC" ]; then
+    PYTHON_EXEC="${NOTEBOOK_HYGIENE_PYTHON:-python}"
+fi
+
+exec "$PYTHON_EXEC" -B scripts/notebook_hygiene.py --check --staged
